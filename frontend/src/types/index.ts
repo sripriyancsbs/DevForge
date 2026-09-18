@@ -1,5 +1,7 @@
 export type StateStatus = 'healthy' | 'warning' | 'failed' | 'deploying' | 'pending' | 'rolled_back' | 'degraded';
 
+export type ProvisioningState = 'PENDING' | 'PROVISIONING' | 'READY' | 'FAILED';
+
 export interface Application {
   id: number;
   name: string;
@@ -7,16 +9,68 @@ export interface Application {
   description?: string;
   team: string;
   runtime: string;
+  template?: string;
   repository_url: string;
+  repository_owner?: string;
+  repository_name?: string;
+  repository_default_branch?: string;
   branch: string;
   environment: string;
   version: string;
   status: StateStatus;
   port: number;
   replicas: number;
+  database_type?: string;
+  deployment_strategy?: string;
+  provisioning_status?: ProvisioningState;
+  provisioning_error?: string | null;
+  generated_path?: string;
+  manifest_yaml?: string;
   last_deployment_at?: string;
   created_at: string;
   updated_at: string;
+}
+
+export type ProvisioningJobStep =
+  | 'VALIDATE_CONFIGURATION'
+  | 'PREPARE_WORKSPACE'
+  | 'GENERATE_PROJECT'
+  | 'GENERATE_MANIFEST'
+  | 'VALIDATE_PROJECT'
+  | 'CREATING_REPOSITORY'
+  | 'PUSHING_REPOSITORY'
+  | 'COMPLETED';
+
+export interface GitHubStatusResponse {
+  connected: boolean;
+  owner: string;
+  authenticated_user?: string | null;
+  error?: string | null;
+}
+
+export interface ProvisioningJob {
+  id: number;
+  application_id: number;
+  status: 'PENDING' | 'PROVISIONING' | 'READY' | 'FAILED' | 'RETRY';
+  template: string;
+  current_step: ProvisioningJobStep;
+  attempt: number;
+  max_attempts: number;
+  is_retryable: boolean;
+  error_message?: string | null;
+  created_at: string;
+  started_at?: string | null;
+  completed_at?: string | null;
+}
+
+export interface ApplicationProvisioningResponse {
+  application: Application;
+  provisioning_status: ProvisioningState;
+  job_id?: number;
+  generated_path?: string;
+  manifest?: string;
+  files_generated: string[];
+  message: string;
 }
 
 export interface Deployment {

@@ -100,13 +100,11 @@ export const App: React.FC = () => {
   };
 
   // Handle creating an application
-  const handleCreateApplication = async (data: any): Promise<Application> => {
-    const newApp = await api.createApplication(data);
-    showToast(`Application '${newApp.name}' provisioned successfully`);
+  const handleCreateApplication = async (data: any): Promise<any> => {
+    const res = await api.createApplication(data);
+    showToast(`Application '${res.application.name}' provisioned successfully`);
     await loadPlatformData();
-    setCurrentTab('applications');
-    setSelectedApp(newApp);
-    return newApp;
+    return res;
   };
 
   return (
@@ -125,6 +123,7 @@ export const App: React.FC = () => {
           onOpenCommandPalette={() => setIsCommandPaletteOpen(true)}
           onToggleSidebar={() => setIsMobileNavOpen(!isMobileNavOpen)}
           onNavigateToCreate={() => setCurrentTab('create-application')}
+          overviewData={overviewData}
         />
 
         {/* Global Toast Banner */}

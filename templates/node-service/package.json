@@ -1,0 +1,10 @@
+{
+  "name": "{{APPLICATION_NAME}}",
+  "version": "{{VERSION}}",
+  "description": "{{DESCRIPTION}}",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {}
+}

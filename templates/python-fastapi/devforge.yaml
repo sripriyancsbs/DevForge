@@ -1,20 +1,23 @@
-schemaVersion: "v1"
-name: "python-fastapi-starter"
-description: "Production-ready Python FastAPI microservice template with automatic OpenAPI docs and health probes"
-runtime: "python:3.12"
-port: 8000
-healthCheck:
-  path: "/healthz"
-  port: 8000
-resources:
-  cpu: "500m"
-  memory: "512Mi"
-environments:
-  development:
-    replicas: 1
-    env:
-      LOG_LEVEL: "DEBUG"
-  production:
-    replicas: 3
-    env:
-      LOG_LEVEL: "INFO"
+apiVersion: devforge/v1
+kind: ApplicationManifest
+metadata:
+  name: "{{APPLICATION_NAME}}"
+  version: "{{VERSION}}"
+  description: "{{DESCRIPTION}}"
+  team: "{{TEAM}}"
+spec:
+  runtime: "{{RUNTIME}}"
+  template: "python-fastapi"
+  environment: "{{ENVIRONMENT}}"
+  port: {{PORT}}
+  database:
+    type: "{{DATABASE_TYPE}}"
+  build:
+    docker: true
+    dockerfile: "Dockerfile"
+  deployment:
+    strategy: "{{DEPLOYMENT_STRATEGY}}"
+    replicas: {{REPLICAS}}
+  healthCheck:
+    path: "/healthz"
+    port: {{PORT}}

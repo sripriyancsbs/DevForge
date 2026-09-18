@@ -1,11 +1,11 @@
 from fastapi import FastAPI
 
-app = FastAPI(title="Microservice", version="1.0.0")
+app = FastAPI(title="{{APPLICATION_NAME}}", version="{{VERSION}}")
 
 @app.get("/healthz")
 def health_check():
-    return {"status": "ok", "service": "healthy"}
+    return {"status": "ok", "service": "{{APPLICATION_NAME}}"}
 
 @app.get("/")
 def root():
-    return {"message": "Service is running on DevForge"}
+    return {"message": "Service {{APPLICATION_NAME}} is running on DevForge"}

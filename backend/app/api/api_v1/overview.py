@@ -19,7 +19,7 @@ def get_overview(db: Session = Depends(get_db)):
     services = db.query(ServiceHealth).all()
     healthy_services_count = sum(1 for s in services if s.status == "healthy")
     total_services = len(services)
-    healthy_str = f"{healthy_services_count} / {total_services} Healthy" if total_services > 0 else "All Healthy"
+    healthy_str = f"{healthy_services_count} / {total_services} Healthy" if total_services > 0 else "0 / 0 Healthy"
 
     # Active and Failed deployments
     active_deployments = db.query(Deployment).filter(Deployment.status.in_(["deploying", "building", "pending"])).count()
@@ -37,13 +37,13 @@ def get_overview(db: Session = Depends(get_db)):
             label="Healthy Services",
             value=healthy_str,
             change="98.4% uptime",
-            status="healthy" if healthy_services_count == total_services else "warning",
+            status="healthy" if healthy_services_count == total_services and total_services > 0 else "warning",
             subtext="Active healthchecks passing"
         ),
         MetricCard(
             label="Active Deployments",
             value=str(active_deployments),
-            change="In pipeline",
+            change="In pipeline" if active_deployments > 0 else "Idle",
             status="healthy" if active_deployments == 0 else "neutral",
             subtext="Running build & rollout"
         ),

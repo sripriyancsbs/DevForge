@@ -1,39 +1,73 @@
 import logging
 from contextlib import asynccontextmanager
-from fastapi import FastAPI
+from fastapi import FastAPI, Request, status
+from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.exceptions import RequestValidationError
 from app.core.config import settings
-from app.db.session import engine, Base, SessionLocal
+from app.db.session import engine, Base, SessionLocal, verify_connection, run_phase2_migrations
 from app.db.seed import seed_database
-from app.api.api_v1 import overview, applications, deployments, environments, activity, infrastructure, monitoring
+from app.api.api_v1 import (
+    overview,
+    applications,
+    deployments,
+    environments,
+    activity,
+    infrastructure,
+    monitoring,
+    provisioning,
+    integrations,
+)
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("devforge")
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Startup: create tables and seed realistic platform data
-    logger.info("Initializing DevForge database tables...")
-    Base.metadata.create_all(bind=engine)
+    # 1. Strictly verify PostgreSQL connectivity - fail loudly if unreachable
+    logger.info("Verifying PostgreSQL database connectivity...")
+    verify_connection()
     
+    # 2. Initialize DevForge database schema in PostgreSQL
+    logger.info("Creating DevForge tables in PostgreSQL if not present...")
+    Base.metadata.create_all(bind=engine)
+    run_phase2_migrations()
+    
+    # 3. Seed initial platform dataset
     db = SessionLocal()
     try:
         seed_database(db)
-        logger.info("DevForge database successfully seeded with platform data.")
+        logger.info("DevForge PostgreSQL database verified and seeded successfully.")
     except Exception as e:
         logger.error(f"Error seeding database: {e}")
+        raise RuntimeError(f"Database initialization failed: {e}") from e
     finally:
         db.close()
+
     yield
-    # Shutdown
     logger.info("DevForge API shutting down...")
 
 app = FastAPI(
     title=settings.PROJECT_NAME,
+    description="DevForge Internal Developer Platform (IDP) Core REST API",
+    version="0.1.0",
     openapi_url=f"{settings.API_V1_STR}/openapi.json",
     docs_url=f"{settings.API_V1_STR}/docs",
     lifespan=lifespan
 )
+
+# Custom validation error handler
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request: Request, exc: RequestValidationError):
+    errors = []
+    for err in exc.errors():
+        field = ".".join(str(loc) for loc in err.get("loc", []))
+        msg = err.get("msg", "Invalid value")
+        errors.append({"field": field, "message": msg})
+    return JSONResponse(
+        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+        content={"detail": "Validation error", "errors": errors}
+    )
 
 # Set CORS
 app.add_middleware(
@@ -44,14 +78,27 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Health endpoint
+# Health endpoint - actively checks PostgreSQL probe
 @app.get("/health")
 def health():
+    try:
+        verify_connection()
+        db_status = "connected"
+    except Exception as e:
+        return JSONResponse(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            content={
+                "status": "degraded",
+                "service": "DevForge API",
+                "database": f"disconnected: {e}",
+                "environment": settings.ENVIRONMENT
+            }
+        )
     return {
         "status": "healthy",
         "service": "DevForge API",
         "environment": settings.ENVIRONMENT,
-        "database": "connected"
+        "database": db_status
     }
 
 # Register API Routers
@@ -62,6 +109,8 @@ app.include_router(environments.router, prefix=f"{settings.API_V1_STR}/environme
 app.include_router(activity.router, prefix=f"{settings.API_V1_STR}/activity", tags=["activity"])
 app.include_router(infrastructure.router, prefix=f"{settings.API_V1_STR}/infrastructure", tags=["infrastructure"])
 app.include_router(monitoring.router, prefix=f"{settings.API_V1_STR}/monitoring", tags=["monitoring"])
+app.include_router(provisioning.router, prefix=f"{settings.API_V1_STR}/provisioning", tags=["provisioning"])
+app.include_router(integrations.router, prefix=f"{settings.API_V1_STR}/integrations", tags=["integrations"])
 
 if __name__ == "__main__":
     import uvicorn

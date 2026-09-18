@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta
+from datetime import datetime, timezone, timedelta
 from sqlalchemy.orm import Session
 from app.models.application import Application
 from app.models.deployment import Deployment
@@ -11,7 +11,7 @@ def seed_database(db: Session):
     if db.query(Application).count() > 0:
         return
 
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
 
     # 1. Seed Environments
     environments_data = [
@@ -73,7 +73,7 @@ def seed_database(db: Session):
             name="payment-gateway",
             slug="payment-gateway",
             description="PCI-DSS compliant payment processing, Stripe integrations, and settlement dispatch.",
-            team="Payments",
+            team="Payments Core",
             runtime="Python 3.12 (FastAPI)",
             repository_url="https://github.com/devforge-org/payment-gateway",
             branch="main",
@@ -89,7 +89,7 @@ def seed_database(db: Session):
             name="auth-service",
             slug="auth-service",
             description="OAuth2/OIDC identity provider, session management, and RBAC policy enforcement engine.",
-            team="Security",
+            team="Security & Identity",
             runtime="Go 1.22",
             repository_url="https://github.com/devforge-org/auth-service",
             branch="main",
@@ -121,7 +121,7 @@ def seed_database(db: Session):
             name="customer-dashboard",
             slug="customer-dashboard",
             description="Next-generation customer portal React SPA with client telemetry and billing management.",
-            team="Frontend Infra",
+            team="Frontend Infrastructure",
             runtime="Node.js 20 (Vite)",
             repository_url="https://github.com/devforge-org/customer-dashboard",
             branch="main",
@@ -137,7 +137,7 @@ def seed_database(db: Session):
             name="event-stream-ingestor",
             slug="event-stream-ingestor",
             description="Kafka event consumer and clickstream processor writing to long-term analytical storage.",
-            team="Data Platform",
+            team="Data Engineering",
             runtime="Go 1.22",
             repository_url="https://github.com/devforge-org/event-stream-ingestor",
             branch="main",
@@ -153,7 +153,7 @@ def seed_database(db: Session):
             name="notification-worker",
             slug="notification-worker",
             description="Multi-channel notification dispatcher (Email via SES, SMS via Twilio, Webhooks, Push).",
-            team="Core Platform",
+            team="Platform Engineering",
             runtime="Python 3.12 (FastAPI)",
             repository_url="https://github.com/devforge-org/notification-worker",
             branch="main",
@@ -169,8 +169,8 @@ def seed_database(db: Session):
             name="recommendation-engine",
             slug="recommendation-engine",
             description="Vector search and personalized candidate reranking model inference microservice.",
-            team="ML Engineering",
-            runtime="Python 3.12",
+            team="Data Engineering",
+            runtime="Python 3.12 (FastAPI)",
             repository_url="https://github.com/devforge-org/recommendation-engine",
             branch="develop",
             environment="staging",
@@ -185,7 +185,7 @@ def seed_database(db: Session):
             name="checkout-service",
             slug="checkout-service",
             description="Shopping cart orchestration, discount validation, and tax calculation backend.",
-            team="Payments",
+            team="Payments Core",
             runtime="Node.js 20",
             repository_url="https://github.com/devforge-org/checkout-service",
             branch="main",
@@ -201,7 +201,7 @@ def seed_database(db: Session):
     db.add_all(apps_data)
     db.commit()
 
-    # 3. Seed Deployments
+    # 3. Seed Deployments with foreign keys
     payment_app = db.query(Application).filter(Application.slug == "payment-gateway").first()
     auth_app = db.query(Application).filter(Application.slug == "auth-service").first()
     notif_app = db.query(Application).filter(Application.slug == "notification-worker").first()
@@ -292,9 +292,10 @@ def seed_database(db: Session):
     db.add_all(deployments_data)
     db.commit()
 
-    # 4. Seed Service Health
+    # 4. Seed Service Health linked to applications
     health_data = [
         ServiceHealth(
+            application_id=payment_app.id,
             service_name="payment-gateway",
             status="healthy",
             cpu_percent=14.2,
@@ -304,6 +305,7 @@ def seed_database(db: Session):
             uptime="99.99%"
         ),
         ServiceHealth(
+            application_id=auth_app.id,
             service_name="auth-service",
             status="healthy",
             cpu_percent=8.5,
@@ -313,6 +315,7 @@ def seed_database(db: Session):
             uptime="100.00%"
         ),
         ServiceHealth(
+            application_id=inv_app.id,
             service_name="inventory-api",
             status="warning",
             cpu_percent=82.4,
@@ -322,6 +325,7 @@ def seed_database(db: Session):
             uptime="99.65%"
         ),
         ServiceHealth(
+            application_id=cust_app.id,
             service_name="customer-dashboard",
             status="healthy",
             cpu_percent=4.1,
@@ -340,6 +344,7 @@ def seed_database(db: Session):
             uptime="99.98%"
         ),
         ServiceHealth(
+            application_id=notif_app.id,
             service_name="notification-worker",
             status="failed",
             cpu_percent=0.0,

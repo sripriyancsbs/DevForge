@@ -1,14 +1,17 @@
 import {
   OverviewData,
   Application,
+  ApplicationProvisioningResponse,
   Deployment,
   Environment,
   InfrastructureData,
   MonitoringData,
-  Activity
+  Activity,
+  ProvisioningJob,
+  GitHubStatusResponse
 } from '../types';
 
-const API_BASE = '/api/v1';
+const API_BASE = (import.meta as any).env?.VITE_API_BASE_URL || '/api/v1';
 
 export const api = {
   async getOverview(): Promise<OverviewData> {
@@ -35,26 +38,39 @@ export const api = {
     return res.json();
   },
 
+  async getApplicationManifest(idOrSlug: string | number): Promise<string> {
+    const res = await fetch(`${API_BASE}/applications/${idOrSlug}/manifest`);
+    if (!res.ok) throw new Error(`HTTP ${res.status}: Failed to fetch devforge.yaml manifest`);
+    return res.text();
+  },
+
   async createApplication(data: {
     name: string;
     description?: string;
-    team: string;
-    runtime: string;
-    repository_url: string;
+    team?: string;
+    runtime?: string;
+    template?: string;
+    repository_url?: string;
     branch?: string;
     environment?: string;
+    database_type?: string;
+    deployment_strategy?: string;
     version?: string;
     port?: number;
     replicas?: number;
-  }): Promise<Application> {
+  }): Promise<ApplicationProvisioningResponse> {
     const res = await fetch(`${API_BASE}/applications`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data)
     });
     if (!res.ok) {
-      const err = await res.json().catch(() => ({ detail: 'Creation failed' }));
-      throw new Error(err.detail || 'Failed to create application');
+      const err = await res.json().catch(() => ({ detail: 'Provisioning failed' }));
+      let msg = err.detail || 'Failed to provision application';
+      if (err.errors && Array.isArray(err.errors)) {
+        msg = err.errors.map((e: any) => `${e.field}: ${e.message}`).join(', ');
+      }
+      throw new Error(msg);
     }
     return res.json();
   },
@@ -104,4 +120,43 @@ export const api = {
     if (!res.ok) throw new Error(`HTTP ${res.status}: Failed to fetch monitoring`);
     return res.json();
   },
+
+  async getProvisioningJob(jobId: number): Promise<ProvisioningJob> {
+    const res = await fetch(`${API_BASE}/provisioning/${jobId}`);
+    if (!res.ok) throw new Error(`HTTP ${res.status}: Failed to fetch provisioning job #${jobId}`);
+    return res.json();
+  },
+
+  async retryProvisioningJob(jobId: number): Promise<ProvisioningJob> {
+    const res = await fetch(`${API_BASE}/provisioning/${jobId}/retry`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' }
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}: Failed to retry provisioning job #${jobId}`);
+    return res.json();
+  },
+
+  async getLatestJobForApplication(appId: number): Promise<ProvisioningJob> {
+    const res = await fetch(`${API_BASE}/provisioning/by-app/${appId}`);
+    if (!res.ok) throw new Error(`HTTP ${res.status}: Failed to fetch job for application #${appId}`);
+    return res.json();
+  },
+
+  async getGitHubStatus(): Promise<GitHubStatusResponse> {
+    const res = await fetch(`${API_BASE}/integrations/github/status`);
+    if (!res.ok) throw new Error(`HTTP ${res.status}: Failed to fetch GitHub status`);
+    return res.json();
+  },
+
+  async reprovisionApplication(appId: number): Promise<ApplicationProvisioningResponse> {
+    const res = await fetch(`${API_BASE}/applications/${appId}/provision`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' }
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ detail: 'Failed to trigger reprovisioning' }));
+      throw new Error(err.detail || 'Failed to trigger reprovisioning');
+    }
+    return res.json();
+  }
 };
