@@ -1,0 +1,16 @@
+schemaVersion: "v1"
+name: "node-service"
+description: "Node.js REST API service with lightweight containerization"
+runtime: "nodejs:20"
+port: 3000
+healthCheck:
+  path: "/healthz"
+  port: 3000
+resources:
+  cpu: "250m"
+  memory: "256Mi"
+environments:
+  development:
+    replicas: 1
+  production:
+    replicas: 2

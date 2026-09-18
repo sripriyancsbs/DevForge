@@ -1,0 +1,16 @@
+schemaVersion: "v1"
+name: "react-vite-starter"
+description: "High-performance React SPA with Vite, TypeScript, and modern web tooling"
+runtime: "nodejs:20"
+port: 80
+healthCheck:
+  path: "/health"
+  port: 80
+resources:
+  cpu: "250m"
+  memory: "256Mi"
+environments:
+  development:
+    replicas: 1
+  production:
+    replicas: 2

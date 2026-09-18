@@ -1,0 +1,20 @@
+schemaVersion: "v1"
+name: "python-fastapi-starter"
+description: "Production-ready Python FastAPI microservice template with automatic OpenAPI docs and health probes"
+runtime: "python:3.12"
+port: 8000
+healthCheck:
+  path: "/healthz"
+  port: 8000
+resources:
+  cpu: "500m"
+  memory: "512Mi"
+environments:
+  development:
+    replicas: 1
+    env:
+      LOG_LEVEL: "DEBUG"
+  production:
+    replicas: 3
+    env:
+      LOG_LEVEL: "INFO"

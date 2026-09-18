@@ -1,0 +1,16 @@
+schemaVersion: "v1"
+name: "go-microservice"
+description: "Ultra-lean compiled Go microservice template with minimal container footprint"
+runtime: "go:1.22"
+port: 8080
+healthCheck:
+  path: "/health"
+  port: 8080
+resources:
+  cpu: "100m"
+  memory: "128Mi"
+environments:
+  development:
+    replicas: 1
+  production:
+    replicas: 3
