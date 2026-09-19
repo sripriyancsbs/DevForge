@@ -26,7 +26,19 @@ class GitOpsManifestService:
     """
 
     def __init__(self, gitops_root: Optional[str] = None):
-        self.gitops_root = Path(gitops_root or os.getenv("DEVFORGE_GITOPS_DIR", "/app/gitops"))
+        if gitops_root:
+            self.gitops_root = Path(gitops_root)
+        elif os.getenv("DEVFORGE_GITOPS_DIR"):
+            self.gitops_root = Path(os.getenv("DEVFORGE_GITOPS_DIR"))
+        elif os.path.exists("/app/gitops"):
+            self.gitops_root = Path("/app/gitops")
+        else:
+            repo_root_gitops = Path(__file__).resolve().parents[4] / "gitops"
+            if repo_root_gitops.exists():
+                self.gitops_root = repo_root_gitops
+            else:
+                import tempfile
+                self.gitops_root = Path(tempfile.gettempdir()) / "devforge-gitops"
         self.manifest_gen = ManifestGenerator()
 
     def get_application_gitops_dir(self, app_slug: str) -> Path:

@@ -189,10 +189,13 @@ def test_cooldown_enforcement(db, test_app):
         attempts=1,
         status="DETECTED"
     )
+    db.add(event)
+    db.commit()
+    db.refresh(event)
 
-    # Insert a recent completed execution 30 seconds ago
+    # Insert a recent completed execution 30 seconds ago referencing this event
     recent_exec = RemediationExecution(
-        event_id=1,
+        event_id=event.id,
         application_id=test_app.id,
         environment_id="development",
         action="KUBERNETES_ROLLOUT_RESTART",

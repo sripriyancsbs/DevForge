@@ -39,8 +39,10 @@ class TerraformClient:
         else:
             # Default to <workspace_root>/terraform or /app/terraform
             possible_paths = [
+                Path(__file__).resolve().parents[4] / "terraform",
+                Path(__file__).resolve().parents[3] / "terraform",
                 Path(os.getcwd()) / "terraform",
-                Path(__file__).resolve().parent.parent.parent.parent / "terraform",
+                Path(os.getcwd()).parent / "terraform",
                 Path("/app/terraform"),
             ]
             self.base_dir = next((p.resolve() for p in possible_paths if p.exists()), possible_paths[0].resolve())
