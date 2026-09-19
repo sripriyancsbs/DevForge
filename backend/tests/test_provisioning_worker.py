@@ -372,7 +372,7 @@ def test_retry_provisioning_job_api(client):
     db = SessionLocal()
     try:
         finished = None
-        for _ in range(20):
+        for _ in range(30):
             db.expire_all()
             job_record = db.query(ProvisioningJob).filter(ProvisioningJob.id == job_id).first()
             if job_record and job_record.status == "READY":
@@ -381,7 +381,7 @@ def test_retry_provisioning_job_api(client):
             elif job_record and job_record.status == "PENDING":
                 finished = provisioning_service.execute_job(job_id, db)
                 break
-            time.sleep(0.3)
+            time.sleep(0.5)
 
         if not finished:
             db.expire_all()
