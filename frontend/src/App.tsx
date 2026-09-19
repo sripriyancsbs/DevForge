@@ -133,9 +133,6 @@ export const App: React.FC = () => {
   const loadPlatformData = useCallback(async () => {
     setLoading(true);
     try {
-      if (!getAuthToken()) {
-        await api.login('admin', 'AdminPassword123!').catch(() => null);
-      }
       const [ov, apps, envs, deps] = await Promise.all([
         api.getOverview().catch(() => null),
         api.getApplications().catch(() => []),
