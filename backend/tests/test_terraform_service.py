@@ -196,7 +196,12 @@ def test_api_get_terraform_status():
     assert "resources_count" in data
 
 
-def test_api_plan_terraform_success():
+@patch("app.api.api_v1.infrastructure.plan_service.client")
+def test_api_plan_terraform_success(mock_client):
+    mock_client.plan.return_value = (
+        "Plan: 3 to add, 0 to change, 0 to destroy.",
+        {"to_add": 3, "to_change": 0, "to_destroy": 0, "has_changes": True}
+    )
     resp = client.post("/api/v1/infrastructure/terraform/plan", json={"environment": "development"})
     assert resp.status_code == 200
     data = resp.json()
@@ -212,7 +217,12 @@ def test_api_plan_terraform_invalid_environment():
     assert "Invalid or forbidden environment" in resp.json()["detail"]
 
 
-def test_api_apply_terraform_success():
+@patch("app.api.api_v1.infrastructure.apply_service.client")
+def test_api_apply_terraform_success(mock_client):
+    mock_client.apply.return_value = (
+        "Apply complete! Resources: 3 added, 0 changed, 0 destroyed.",
+        {"added": 3, "changed": 0, "destroyed": 0, "total_managed": 3}
+    )
     resp = client.post("/api/v1/infrastructure/terraform/apply", json={"environment": "development"})
     assert resp.status_code == 200
     data = resp.json()
