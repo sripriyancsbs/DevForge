@@ -7,22 +7,32 @@ def setup_test_database():
     Ensure the test database schema, tables, migrations, and baseline seed data
     are initialized before any test runs. This is critical for fresh CI environments.
     """
+    import time
+    from sqlalchemy import text
     from app.db.session import engine, Base, SessionLocal, run_phase2_migrations
     import app.models  # Register all SQLAlchemy models
     from app.db.seed import seed_database
 
-    try:
-        Base.metadata.create_all(bind=engine)
-        run_phase2_migrations()
-        db = SessionLocal()
+    # Active retry loop waiting for PostgreSQL service to be ready in CI
+    for attempt in range(15):
         try:
-            seed_database(db)
-        except Exception:
-            pass
-        finally:
-            db.close()
-    except Exception as e:
-        print(f"Warning during test database initialization: {e}")
+            with engine.connect() as conn:
+                conn.execute(text("SELECT 1"))
+            break
+        except Exception as conn_err:
+            if attempt == 14:
+                raise RuntimeError(f"Could not connect to test PostgreSQL database: {conn_err}") from conn_err
+            time.sleep(1)
+
+    Base.metadata.create_all(bind=engine)
+    run_phase2_migrations()
+    db = SessionLocal()
+    try:
+        seed_database(db)
+    except Exception:
+        pass
+    finally:
+        db.close()
 
 
 @pytest.fixture(autouse=True)
