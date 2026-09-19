@@ -6,7 +6,9 @@ from app.db.session import engine, verify_connection
 
 @pytest.fixture(scope="module")
 def client():
-    with TestClient(app) as c:
+    from app.core.security import create_access_token
+    token = create_access_token(subject="1", username="admin", role="ADMIN")
+    with TestClient(app, headers={"Authorization": f"Bearer {token}"}) as c:
         yield c
 
 # 1. Health Probe & PostgreSQL Connection Check

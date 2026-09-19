@@ -11,10 +11,7 @@ from app.models.application import Application
 from app.db.session import SessionLocal
 
 
-@pytest.fixture(scope="module")
-def client():
-    with TestClient(app) as c:
-        yield c
+
 
 
 def test_workflow_generator_all_templates():

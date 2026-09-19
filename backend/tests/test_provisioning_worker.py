@@ -36,10 +36,7 @@ def mock_github_repository_service():
         }
         yield mock_repo_svc
 
-@pytest.fixture(scope="module")
-def client():
-    with TestClient(app) as c:
-        yield c
+
 
 @pytest.fixture(autouse=True)
 def cleanup_test_apps():

@@ -41,6 +41,12 @@ class ExecutionResponse(BaseModel):
     updated_at: str
 
 
+from app.core.auth import require_role
+from app.models.user import User
+from app.core.rate_limit import rate_limit
+from app.core.security import mask_secret
+
+
 @router.get("/playbooks")
 def list_playbooks():
     """List all approved Ansible playbooks and their metadata."""
@@ -50,7 +56,9 @@ def list_playbooks():
 @router.post("/executions", status_code=status.HTTP_201_CREATED)
 def create_execution(
     request: CreateExecutionRequest,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_role(["OPERATOR", "ADMIN"])),
+    _limiter = Depends(rate_limit("ansible_execute", max_requests=10, window_seconds=60))
 ):
     """
     Queue an approved Ansible playbook execution for asynchronous worker processing.
@@ -63,7 +71,12 @@ def create_execution(
             application_id=request.application_id,
             environment_id=request.environment_id
         )
-        return execution.to_dict()
+        data = execution.to_dict()
+        if data.get("output"):
+            data["output"] = mask_secret(data["output"])
+        if data.get("error_output"):
+            data["error_output"] = mask_secret(data["error_output"])
+        return data
     except (AnsiblePlaybookNotFoundError, AnsibleSecurityError) as val_err:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,

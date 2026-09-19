@@ -276,7 +276,22 @@ def run_phase2_migrations():
         );""",
         "CREATE INDEX IF NOT EXISTS ix_rem_exec_event_status ON remediation_executions (event_id, status);",
         "CREATE INDEX IF NOT EXISTS ix_rem_exec_app_env ON remediation_executions (application_id, environment_id);",
-        "CREATE INDEX IF NOT EXISTS ix_rem_exec_created ON remediation_executions (created_at);"
+        "CREATE INDEX IF NOT EXISTS ix_rem_exec_created ON remediation_executions (created_at);",
+
+        # Phase 12 Migrations: User Authentication and RBAC
+        """CREATE TABLE IF NOT EXISTS users (
+            id SERIAL PRIMARY KEY,
+            username VARCHAR(50) UNIQUE NOT NULL,
+            email VARCHAR(120) UNIQUE NOT NULL,
+            hashed_password VARCHAR(255) NOT NULL,
+            role VARCHAR(20) DEFAULT 'VIEWER' NOT NULL,
+            is_active BOOLEAN DEFAULT TRUE NOT NULL,
+            created_at TIMESTAMPTZ DEFAULT NOW() NOT NULL,
+            updated_at TIMESTAMPTZ DEFAULT NOW() NOT NULL
+        );""",
+        "CREATE INDEX IF NOT EXISTS ix_users_username ON users (username);",
+        "CREATE INDEX IF NOT EXISTS ix_users_email ON users (email);",
+        "CREATE INDEX IF NOT EXISTS ix_users_role ON users (role);"
     ]
     try:
         with engine.begin() as conn:
@@ -311,7 +326,7 @@ def run_phase2_migrations():
                             "description": p_desc,
                         }
                     )
-        logger.info("DevForge PostgreSQL schema migrations (Phase 2-11) applied successfully.")
+        logger.info("DevForge PostgreSQL schema migrations (Phase 2-12) applied successfully.")
     except Exception as e:
         logger.warning(f"Note on migrations (table may not exist yet if fresh DB): {e}")
 

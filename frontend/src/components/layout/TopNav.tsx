@@ -9,10 +9,13 @@ import {
   Menu,
   Plus,
   ArrowRight,
-  Wrench
+  Wrench,
+  Shield,
+  User as UserIcon,
+  ChevronDown
 } from 'lucide-react';
-import { OverviewData, RemediationEvent } from '../../types';
-import { api } from '../../services/api';
+import { OverviewData, RemediationEvent, User, Role } from '../../types';
+import { api, getStoredUser } from '../../services/api';
 
 interface TopNavProps {
   onToggleSidebar: () => void;
@@ -42,6 +45,8 @@ export const TopNav: React.FC<TopNavProps> = ({
   overviewData
 }) => {
   const [showNotifications, setShowNotifications] = useState(false);
+  const [showUserMenu, setShowUserMenu] = useState(false);
+  const [currentUser, setCurrentUser] = useState<User>(getStoredUser());
   const [searchQuery, setSearchQuery] = useState('');
   const [remediationEvents, setRemediationEvents] = useState<RemediationEvent[]>([]);
   const [applicationsList, setApplicationsList] = useState<{ id: number; name: string }[]>([]);
@@ -326,15 +331,108 @@ export const TopNav: React.FC<TopNavProps> = ({
           )}
         </div>
 
-        {/* User profile avatar */}
-        <div className="flex items-center gap-2 pl-2 border-l border-zinc-800">
-          <div className="w-7 h-7 rounded bg-zinc-800 border border-zinc-700 flex items-center justify-center text-xs font-mono text-zinc-300 font-semibold">
-            DF
-          </div>
-          <div className="hidden lg:block text-left">
-            <div className="text-xs font-medium text-zinc-200 leading-tight">platform-admin</div>
-            <div className="text-[10px] text-zinc-500 font-mono">Local Console</div>
-          </div>
+        {/* User profile avatar & RBAC Role Switcher */}
+        <div className="relative">
+          <button
+            id="user-profile-menu-button"
+            onClick={() => setShowUserMenu(!showUserMenu)}
+            className="flex items-center gap-2 pl-2 border-l border-zinc-800 hover:opacity-90 transition cursor-pointer text-left focus:outline-none"
+            aria-label="User session and role options"
+          >
+            <div className="w-7 h-7 rounded bg-zinc-800 border border-zinc-700 flex items-center justify-center text-xs font-mono text-zinc-300 font-semibold uppercase">
+              {currentUser.username.slice(0, 2)}
+            </div>
+            <div className="hidden lg:block text-left">
+              <div className="flex items-center gap-1.5">
+                <span className="text-xs font-medium text-zinc-200 leading-tight">
+                  {currentUser.username}
+                </span>
+                <span className={`text-[9px] font-mono px-1.5 py-0.2 rounded border uppercase font-semibold ${
+                  currentUser.role === 'ADMIN'
+                    ? 'text-violet-400 bg-violet-950/60 border-violet-800/60'
+                    : currentUser.role === 'OPERATOR'
+                    ? 'text-emerald-400 bg-emerald-950/60 border-emerald-800/60'
+                    : currentUser.role === 'DEVELOPER'
+                    ? 'text-amber-400 bg-amber-950/60 border-amber-800/60'
+                    : 'text-zinc-400 bg-zinc-800 border-zinc-700'
+                }`}>
+                  {currentUser.role}
+                </span>
+              </div>
+              <div className="text-[10px] text-zinc-500 font-mono flex items-center gap-1">
+                <span>RBAC Session</span>
+                <ChevronDown className="w-2.5 h-2.5" />
+              </div>
+            </div>
+          </button>
+
+          {showUserMenu && (
+            <div
+              id="user-profile-dropdown"
+              className="absolute right-0 mt-2 w-64 rounded-md border border-zinc-800 bg-[#141417] shadow-xl z-50 text-xs py-1 divide-y divide-zinc-800"
+            >
+              <div className="p-3">
+                <div className="text-xs font-semibold text-white">{currentUser.username}</div>
+                <div className="text-[11px] text-zinc-400 font-mono mt-0.5">{currentUser.email}</div>
+                <div className="mt-2 flex items-center justify-between">
+                  <span className="text-[11px] text-zinc-400">Active Role:</span>
+                  <span className={`text-[10px] font-mono px-2 py-0.5 rounded border uppercase font-bold ${
+                    currentUser.role === 'ADMIN'
+                      ? 'text-violet-400 bg-violet-950/60 border-violet-800/60'
+                      : currentUser.role === 'OPERATOR'
+                      ? 'text-emerald-400 bg-emerald-950/60 border-emerald-800/60'
+                      : currentUser.role === 'DEVELOPER'
+                      ? 'text-amber-400 bg-amber-950/60 border-amber-800/60'
+                      : 'text-zinc-400 bg-zinc-800 border-zinc-700'
+                  }`}>
+                    {currentUser.role}
+                  </span>
+                </div>
+              </div>
+
+              <div className="p-2 space-y-1">
+                <div className="text-[10px] font-mono uppercase tracking-wider text-zinc-500 px-2 py-1">
+                  Switch Active Role (RBAC)
+                </div>
+                {(['ADMIN', 'OPERATOR', 'DEVELOPER', 'VIEWER'] as Role[]).map((r) => (
+                  <button
+                    key={r}
+                    id={`switch-role-${r.toLowerCase()}`}
+                    onClick={() => {
+                      const updated = api.switchRoleSession(r);
+                      setCurrentUser(updated);
+                      setShowUserMenu(false);
+                    }}
+                    className={`w-full text-left px-2.5 py-1.5 rounded flex items-center justify-between transition ${
+                      currentUser.role === r
+                        ? 'bg-zinc-800/80 text-white font-medium'
+                        : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/40'
+                    }`}
+                  >
+                    <span>{r}</span>
+                    {currentUser.role === r && (
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+                    )}
+                  </button>
+                ))}
+              </div>
+
+              <div className="p-2">
+                <button
+                  id="user-logout-button"
+                  onClick={() => {
+                    api.logout();
+                    const viewer = api.switchRoleSession('VIEWER');
+                    setCurrentUser(viewer);
+                    setShowUserMenu(false);
+                  }}
+                  className="w-full text-left px-2.5 py-1.5 rounded text-rose-400 hover:bg-rose-950/30 hover:text-rose-300 transition text-[11px]"
+                >
+                  Clear Session / Logout
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </header>

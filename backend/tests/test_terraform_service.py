@@ -17,7 +17,10 @@ from app.services.terraform.exceptions import (
     TerraformApplyError,
 )
 
-client = TestClient(app)
+from app.core.security import create_access_token
+
+admin_token = create_access_token(subject="1", username="admin", role="ADMIN")
+client = TestClient(app, headers={"Authorization": f"Bearer {admin_token}"})
 
 
 # =========================================================================
@@ -184,7 +187,9 @@ def test_apply_service_idempotency_no_changes(db):
 # 3. REST API ENDPOINTS
 # =========================================================================
 
-def test_api_get_terraform_status():
+@patch("app.api.api_v1.infrastructure.terraform_client.is_installed", return_value=True)
+@patch("app.api.api_v1.infrastructure.terraform_client.get_version", return_value="Terraform v1.7.5")
+def test_api_get_terraform_status(mock_ver, mock_inst):
     resp = client.get("/api/v1/infrastructure/terraform")
     assert resp.status_code == 200
     data = resp.json()

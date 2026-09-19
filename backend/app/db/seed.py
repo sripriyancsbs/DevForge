@@ -5,8 +5,52 @@ from app.models.deployment import Deployment
 from app.models.environment import Environment
 from app.models.service_health import ServiceHealth
 from app.models.activity import Activity
+from app.models.user import User
+from app.core.security import hash_password
+
+def seed_users(db: Session):
+    """Ensure baseline platform users exist with secure PBKDF2 hashed passwords."""
+    try:
+        if db.query(User).count() == 0:
+            users_data = [
+                User(
+                    username="admin",
+                    email="admin@devforge.internal",
+                    hashed_password=hash_password("AdminPassword123!"),
+                    role="ADMIN",
+                    is_active=True
+                ),
+                User(
+                    username="operator",
+                    email="operator@devforge.internal",
+                    hashed_password=hash_password("OperatorPassword123!"),
+                    role="OPERATOR",
+                    is_active=True
+                ),
+                User(
+                    username="developer",
+                    email="developer@devforge.internal",
+                    hashed_password=hash_password("DeveloperPassword123!"),
+                    role="DEVELOPER",
+                    is_active=True
+                ),
+                User(
+                    username="viewer",
+                    email="viewer@devforge.internal",
+                    hashed_password=hash_password("ViewerPassword123!"),
+                    role="VIEWER",
+                    is_active=True
+                ),
+            ]
+            db.add_all(users_data)
+            db.commit()
+    except Exception as e:
+        db.rollback()
 
 def seed_database(db: Session):
+    # Always ensure baseline users exist
+    seed_users(db)
+
     # Check if already seeded
     if db.query(Application).count() > 0:
         return

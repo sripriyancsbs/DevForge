@@ -9,6 +9,9 @@ from app.models.application import Application
 from app.models.activity import Activity
 from app.schemas.deployment import DeploymentResponse, DeploymentCreate
 from app.schemas.application import ALLOWED_ENVIRONMENTS
+from app.core.auth import require_role
+from app.models.user import User
+from app.core.rate_limit import rate_limit
 
 router = APIRouter()
 
@@ -43,7 +46,12 @@ def get_deployment(deployment_id: int, db: Session = Depends(get_db)):
     return dep
 
 @router.post("/trigger", response_model=DeploymentResponse, status_code=status.HTTP_201_CREATED)
-def trigger_deployment(payload: DeploymentCreate, db: Session = Depends(get_db)):
+def trigger_deployment(
+    payload: DeploymentCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_role(["DEVELOPER", "OPERATOR", "ADMIN"])),
+    _limiter = Depends(rate_limit("deployments_trigger", max_requests=10, window_seconds=60))
+):
     app = db.query(Application).filter(Application.id == payload.application_id).first()
     if not app:
         raise HTTPException(
@@ -68,7 +76,7 @@ def trigger_deployment(payload: DeploymentCreate, db: Session = Depends(get_db))
         environment=payload.environment.lower(),
         status="healthy",
         duration="48s",
-        triggered_by="devforge:console",
+        triggered_by=current_user.username,
         logs=(
             f"[00:00:01] Triggered deployment for {app.name} -> {payload.environment}\n"
             f"[00:00:14] CI container lint and test checks passed\n"
@@ -87,7 +95,7 @@ def trigger_deployment(payload: DeploymentCreate, db: Session = Depends(get_db))
 
     # Log activity
     activity = Activity(
-        actor="devforge:console",
+        actor=current_user.username,
         action="Deployment completed",
         target=app.name,
         target_type="application",

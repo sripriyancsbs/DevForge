@@ -16,6 +16,9 @@ from app.schemas.remediation import (
     ApplicationRemediationOverview,
 )
 from app.services.remediation import remediation_engine, policy_service
+from app.core.auth import require_role
+from app.models.user import User
+from app.core.rate_limit import rate_limit
 
 logger = logging.getLogger("devforge.api.remediation")
 
@@ -63,6 +66,8 @@ def get_remediation_event(
 def create_remediation_event(
     payload: RemediationEventCreate,
     db: Session = Depends(get_db),
+    current_user: User = Depends(require_role(["OPERATOR", "ADMIN"])),
+    _limiter = Depends(rate_limit("remediation_create", max_requests=10, window_seconds=60))
 ):
     """Manually report or ingest a health failure event."""
     app = db.query(Application).filter(Application.id == payload.application_id).first()
@@ -85,6 +90,7 @@ def create_remediation_event(
 def retry_remediation_event(
     event_id: int,
     db: Session = Depends(get_db),
+    current_user: User = Depends(require_role(["OPERATOR", "ADMIN"])),
 ):
     """Allow an operator to retry a failed or escalated remediation."""
     try:
@@ -98,6 +104,8 @@ def retry_remediation_event(
 def approve_remediation_event(
     event_id: int,
     db: Session = Depends(get_db),
+    current_user: User = Depends(require_role(["OPERATOR", "ADMIN"])),
+    _limiter = Depends(rate_limit("remediation_approve", max_requests=10, window_seconds=60))
 ):
     """Allow an operator to approve a gated remediation action (e.g. Production rollout)."""
     try:
@@ -111,8 +119,9 @@ def approve_remediation_event(
 def cancel_remediation_event(
     event_id: int,
     db: Session = Depends(get_db),
+    current_user: User = Depends(require_role(["ADMIN"])),
 ):
-    """Allow an operator to cancel an open remediation event."""
+    """Allow an administrator to cancel an open remediation event."""
     try:
         event = remediation_engine.cancel_event(event_id, db)
         return event
@@ -123,6 +132,8 @@ def cancel_remediation_event(
 @router.post("/scan", status_code=status.HTTP_200_OK)
 def trigger_health_scan(
     db: Session = Depends(get_db),
+    current_user: User = Depends(require_role(["OPERATOR", "ADMIN"])),
+    _limiter = Depends(rate_limit("remediation_scan", max_requests=10, window_seconds=60))
 ):
     """Trigger an immediate real infrastructure health scan across all applications."""
     detected = remediation_engine.scan_applications_health(db)
@@ -150,6 +161,7 @@ def list_policies(
 def create_policy(
     payload: RemediationPolicyCreate,
     db: Session = Depends(get_db),
+    current_user: User = Depends(require_role(["ADMIN"])),
 ):
     """Create a new remediation policy from the predefined allowlist."""
     if payload.action not in policy_service.ALLOWED_ACTIONS:

@@ -25,12 +25,18 @@ class Settings(BaseSettings):
     # Dynamic CORS origin parsing from comma-separated string
     ALLOWED_ORIGINS_STR: str = os.getenv(
         "ALLOWED_ORIGINS",
-        "http://localhost:3000,http://localhost:5173,http://127.0.0.1:3000,http://127.0.0.1:5173"
+        "http://localhost:3000,http://localhost:5173,http://127.0.0.1:3000,http://127.0.0.1:5173,https://frontend-two-self-3343htd1ck.vercel.app"
     )
 
     @property
     def ALLOWED_ORIGINS(self) -> List[str]:
         return [origin.strip() for origin in self.ALLOWED_ORIGINS_STR.split(",") if origin.strip()]
+
+    # Security & Authentication Configuration
+    SECRET_KEY: str = os.getenv("SECRET_KEY", "devforge_production_secret_key_fixed_98a72b14c3e80f9d")
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "480"))
+    RATE_LIMIT_ENABLED: bool = os.getenv("RATE_LIMIT_ENABLED", "true").lower() in ("true", "1", "yes")
+    DEBUG: bool = os.getenv("DEBUG", "false").lower() in ("true", "1", "yes")
 
     # GitHub Integration Configuration
     GITHUB_TOKEN: str = os.getenv("GITHUB_TOKEN", "")

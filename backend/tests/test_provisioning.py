@@ -12,10 +12,7 @@ from app.models.application import Application
 from app.models.activity import Activity
 from app.services.provisioning.project_generator import project_generator, get_workspace_root
 
-@pytest.fixture(scope="module")
-def client():
-    with TestClient(app) as c:
-        yield c
+
 
 def clean_test_data():
     db = SessionLocal()

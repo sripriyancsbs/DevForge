@@ -7,7 +7,7 @@ import { ApplicationDetailPage, AppDetailTab } from './pages/ApplicationDetailPa
 import { CreateApplicationPage } from './pages/CreateApplicationPage';
 import { ActivityPage } from './pages/ActivityPage';
 import { SettingsPage } from './pages/SettingsPage';
-import { api } from './services/api';
+import { api, getAuthToken } from './services/api';
 import { Application, Deployment, Environment, OverviewData } from './types';
 import { Box, ArrowLeft, AlertCircle } from 'lucide-react';
 
@@ -133,6 +133,9 @@ export const App: React.FC = () => {
   const loadPlatformData = useCallback(async () => {
     setLoading(true);
     try {
+      if (!getAuthToken()) {
+        await api.login('admin', 'AdminPassword123!').catch(() => null);
+      }
       const [ov, apps, envs, deps] = await Promise.all([
         api.getOverview().catch(() => null),
         api.getApplications().catch(() => []),

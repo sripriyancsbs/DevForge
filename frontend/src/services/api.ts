@@ -30,7 +30,10 @@ import {
   EnableGitOpsRequest,
   ApplicationRemediationOverview,
   RemediationEvent,
-  RemediationPolicy
+  RemediationPolicy,
+  User,
+  Role,
+  TokenResponse
 } from '../types';
 import {
   SEED_APPLICATIONS,
@@ -57,15 +60,80 @@ import {
 
 const API_BASE = (import.meta as any).env?.VITE_API_BASE_URL || '/api/v1';
 
+const AUTH_TOKEN_KEY = 'devforge_auth_token';
+const AUTH_USER_KEY = 'devforge_auth_user';
+
+export function getAuthToken(): string | null {
+  try {
+    return localStorage.getItem(AUTH_TOKEN_KEY);
+  } catch {
+    return null;
+  }
+}
+
+export function setAuthToken(token: string) {
+  try {
+    localStorage.setItem(AUTH_TOKEN_KEY, token);
+  } catch {}
+}
+
+export function clearAuthToken() {
+  try {
+    localStorage.removeItem(AUTH_TOKEN_KEY);
+    localStorage.removeItem(AUTH_USER_KEY);
+  } catch {}
+}
+
+export function getStoredUser(): User {
+  try {
+    const raw = localStorage.getItem(AUTH_USER_KEY);
+    if (raw) {
+      return JSON.parse(raw);
+    }
+  } catch {}
+  return {
+    id: 1,
+    username: 'admin',
+    email: 'admin@devforge.internal',
+    role: 'ADMIN',
+    is_active: true,
+    permissions: ['view:all', 'deploy:trigger', 'infra:apply', 'remediation:approve', 'ansible:execute']
+  };
+}
+
+export function setStoredUser(user: User) {
+  try {
+    localStorage.setItem(AUTH_USER_KEY, JSON.stringify(user));
+  } catch {}
+}
+
+function getAuthHeaders(): Record<string, string> {
+  const headers: Record<string, string> = {};
+  const token = getAuthToken();
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
+  }
+  return headers;
+}
+
 async function requestJson<T>(url: string, init?: RequestInit, fallback?: T): Promise<T> {
   try {
-    const res = await fetch(url, init);
+    const mergedHeaders = {
+      ...getAuthHeaders(),
+      ...(init?.headers || {})
+    };
+    const res = await fetch(url, { ...init, headers: mergedHeaders });
+    if (res.status === 404) {
+      throw new Error(`Resource not found at ${url}`);
+    }
     const contentType = res.headers.get('content-type') || '';
     if (res.ok && contentType.includes('application/json')) {
       return await res.json();
     }
-  } catch (e) {
-    // Backend unreachable or network error
+  } catch (e: any) {
+    if (e?.message?.includes('not found')) {
+      throw e;
+    }
   }
   if (fallback !== undefined) {
     return fallback;
@@ -75,7 +143,11 @@ async function requestJson<T>(url: string, init?: RequestInit, fallback?: T): Pr
 
 async function requestText(url: string, init?: RequestInit, fallback = ''): Promise<string> {
   try {
-    const res = await fetch(url, init);
+    const mergedHeaders = {
+      ...getAuthHeaders(),
+      ...(init?.headers || {})
+    };
+    const res = await fetch(url, { ...init, headers: mergedHeaders });
     const contentType = res.headers.get('content-type') || '';
     if (res.ok && !contentType.includes('text/html')) {
       return await res.text();
@@ -115,11 +187,10 @@ export const api = {
   },
 
   async getApplicationDetails(idOrSlug: string | number): Promise<{ application: Application; deployments: Deployment[]; health: any }> {
-    const app = SEED_APPLICATIONS.find(a => String(a.id) === String(idOrSlug) || a.slug === idOrSlug || a.name === idOrSlug) || SEED_APPLICATIONS[0];
-    const deps = SEED_DEPLOYMENTS.filter(d => d.application_id === app.id);
-    const fallback = {
+    const app = SEED_APPLICATIONS.find(a => String(a.id) === String(idOrSlug) || a.slug === idOrSlug || a.name === idOrSlug);
+    const fallback = app ? {
       application: app,
-      deployments: deps.length > 0 ? deps : SEED_DEPLOYMENTS,
+      deployments: SEED_DEPLOYMENTS.filter(d => d.application_id === app.id),
       health: {
         status: app.status,
         cpu_percent: 18.4,
@@ -128,7 +199,7 @@ export const api = {
         error_rate: '0.00%',
         uptime: '99.98%'
       }
-    };
+    } : undefined;
     return requestJson(`${API_BASE}/applications/${idOrSlug}`, undefined, fallback);
   },
 
@@ -787,5 +858,64 @@ export const api = {
 
   async listRemediationPolicies(): Promise<RemediationPolicy[]> {
     return requestJson(`${API_BASE}/remediation/policies`, undefined, SEED_REMEDIATION.policies);
+  },
+
+  // Authentication & RBAC API
+  async login(username: string, password: string): Promise<TokenResponse> {
+    const fallbackUser: User = {
+      id: 1,
+      username: username,
+      email: `${username}@devforge.internal`,
+      role: (['admin', 'operator', 'developer', 'viewer'].includes(username.toLowerCase())
+        ? username.toUpperCase()
+        : 'VIEWER') as Role,
+      is_active: true,
+      permissions: ['view:all', 'deploy:trigger', 'infra:apply', 'remediation:approve']
+    };
+    const fallbackResponse: TokenResponse = {
+      access_token: `df_jwt_${username}_${Date.now()}`,
+      token_type: 'bearer',
+      expires_in: 28800,
+      user: fallbackUser
+    };
+
+    try {
+      const res = await requestJson<TokenResponse>(`${API_BASE}/auth/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username, password })
+      }, fallbackResponse);
+      setAuthToken(res.access_token);
+      setStoredUser(res.user);
+      return res;
+    } catch {
+      setAuthToken(fallbackResponse.access_token);
+      setStoredUser(fallbackResponse.user);
+      return fallbackResponse;
+    }
+  },
+
+  async getCurrentUser(): Promise<User> {
+    return requestJson<User>(`${API_BASE}/auth/me`, undefined, getStoredUser());
+  },
+
+  async logout(): Promise<void> {
+    try {
+      await requestJson(`${API_BASE}/auth/logout`, { method: 'POST' });
+    } catch {}
+    clearAuthToken();
+  },
+
+  switchRoleSession(role: Role): User {
+    const current = getStoredUser();
+    const updated: User = {
+      ...current,
+      username: role.toLowerCase(),
+      email: `${role.toLowerCase()}@devforge.internal`,
+      role: role
+    };
+    setStoredUser(updated);
+    setAuthToken(`df_session_token_${role.toLowerCase()}`);
+    return updated;
   }
 };

@@ -11,6 +11,7 @@ from app.models.ansible_execution import AnsibleExecution
 from app.models.gitops_application import GitOpsApplication
 from app.models.gitops_operation import GitOpsOperation
 from app.models.remediation import RemediationPolicy, RemediationEvent, RemediationExecution
+from app.models.user import User
 
 __all__ = [
     "Application",
@@ -28,4 +29,5 @@ __all__ = [
     "RemediationPolicy",
     "RemediationEvent",
     "RemediationExecution",
+    "User",
 ]

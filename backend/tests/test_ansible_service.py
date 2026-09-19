@@ -16,8 +16,10 @@ from app.services.ansible import (
     AnsiblePlaybookNotFoundError,
     AnsibleSecurityError,
 )
+from app.core.security import create_access_token
 
-client = TestClient(app)
+admin_token = create_access_token(subject="1", username="admin", role="ADMIN")
+client = TestClient(app, headers={"Authorization": f"Bearer {admin_token}"})
 
 
 def test_strip_ansi():
@@ -95,6 +97,8 @@ def test_execution_service_create_and_acquire():
 
 
 def test_execution_service_execute_job_success_and_idempotency():
+    if not ansible_client.is_installed():
+        pytest.skip("Ansible CLI not installed on this test host")
     db = SessionLocal()
     try:
         # 1. First run of configure_environment
@@ -134,6 +138,8 @@ def test_execution_service_execute_job_success_and_idempotency():
 
 
 def test_execution_service_retry():
+    if not ansible_client.is_installed():
+        pytest.skip("Ansible CLI not installed on this test host")
     db = SessionLocal()
     try:
         exec_rec = execution_service.create_execution(

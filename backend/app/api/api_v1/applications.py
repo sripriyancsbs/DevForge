@@ -31,6 +31,8 @@ from app.services.image import image_service
 from app.schemas.remediation import ApplicationRemediationOverview, RemediationPolicyResponse
 from app.models.remediation import RemediationEvent, RemediationExecution
 from app.services.remediation import policy_service
+from app.core.auth import require_role
+from app.models.user import User
 from sqlalchemy import desc
 
 logger = logging.getLogger("devforge.api.applications")
@@ -128,7 +130,8 @@ def get_application_manifest(app_id_or_slug: str, db: Session = Depends(get_db))
 def create_application(
     payload: ApplicationCreate,
     sync: bool = Query(False, description="Execute synchronously (useful for automated testing)"),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_role(["DEVELOPER", "OPERATOR", "ADMIN"]))
 ):
     """
     DevForge Provisioning Execution Model:
@@ -250,7 +253,11 @@ def create_application(
 
 
 @router.delete("/{app_id}", status_code=status.HTTP_200_OK)
-def delete_application(app_id: int, db: Session = Depends(get_db)):
+def delete_application(
+    app_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_role(["DEVELOPER", "OPERATOR", "ADMIN"]))
+):
     app = db.query(Application).filter(Application.id == app_id).first()
     if not app:
         raise HTTPException(
@@ -263,7 +270,7 @@ def delete_application(app_id: int, db: Session = Depends(get_db)):
 
     # Log activity
     db.add(Activity(
-        actor="platform.user",
+        actor=current_user.username,
         action="Application deleted",
         target=app_name,
         target_type="application",
@@ -280,7 +287,8 @@ def delete_application(app_id: int, db: Session = Depends(get_db)):
 def trigger_application_provision(
     application_id: int,
     sync: bool = Query(False, description="Execute synchronously (useful for automated testing)"),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_role(["DEVELOPER", "OPERATOR", "ADMIN"]))
 ):
     """
     Safely trigger or re-trigger provisioning for an application.

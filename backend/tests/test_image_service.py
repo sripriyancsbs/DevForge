@@ -11,9 +11,7 @@ from app.services.image.image_service import image_service
 from app.services.ci.workflow_generator import workflow_generator
 
 
-@pytest.fixture
-def client():
-    return TestClient(app)
+
 
 
 def test_get_image_repository_canonical_naming():

@@ -144,8 +144,18 @@ def get_terraform_status(db: Session = Depends(get_db)):
     }
 
 
+from app.core.auth import require_role
+from app.models.user import User
+from app.core.rate_limit import rate_limit
+
+
 @router.post("/terraform/plan")
-def plan_terraform(req: TerraformPlanRequest = TerraformPlanRequest(), db: Session = Depends(get_db)):
+def plan_terraform(
+    req: TerraformPlanRequest = TerraformPlanRequest(),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_role(["OPERATOR", "ADMIN"])),
+    _limiter = Depends(rate_limit("terraform_plan", max_requests=10, window_seconds=60))
+):
     """Generate a Terraform plan for the specified environment."""
     try:
         res = plan_service.generate_plan(db, environment=req.environment, var_overrides=req.variables)
@@ -159,7 +169,12 @@ def plan_terraform(req: TerraformPlanRequest = TerraformPlanRequest(), db: Sessi
 
 
 @router.post("/terraform/apply")
-def apply_terraform(req: TerraformApplyRequest = TerraformApplyRequest(), db: Session = Depends(get_db)):
+def apply_terraform(
+    req: TerraformApplyRequest = TerraformApplyRequest(),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_role(["ADMIN"])),
+    _limiter = Depends(rate_limit("terraform_apply", max_requests=5, window_seconds=60))
+):
     """Apply Terraform infrastructure changes for the specified environment."""
     try:
         res = apply_service.apply_infrastructure(

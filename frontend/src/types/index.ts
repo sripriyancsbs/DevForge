@@ -638,6 +638,22 @@ export interface ApplicationRemediationOverview {
   policies: RemediationPolicy[];
 }
 
+// Phase 12 RBAC & Authentication Types
+export type Role = 'ADMIN' | 'OPERATOR' | 'DEVELOPER' | 'VIEWER';
 
+export interface User {
+  id: number;
+  username: string;
+  email: string;
+  role: Role;
+  is_active: boolean;
+  created_at?: string;
+  permissions?: string[];
+}
 
-
+export interface TokenResponse {
+  access_token: string;
+  token_type: string;
+  expires_in: number;
+  user: User;
+}
