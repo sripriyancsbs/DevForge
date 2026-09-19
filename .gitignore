@@ -83,3 +83,6 @@ kubeconfig_temp.yaml
 *.tsbuildinfo
 .devforge/
 test_real_deploy.py
+
+.vercel
+frontend/.vercel
