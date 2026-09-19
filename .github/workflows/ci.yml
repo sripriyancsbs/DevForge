@@ -40,6 +40,12 @@ jobs:
           pip install -r backend/requirements.txt
           pip install pytest httpx flake8
 
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: '1.7.5'
+          terraform_wrapper: false
+
       - name: Lint with Flake8
         run: |
           flake8 backend/app --count --select=E9,F63,F7,F82 --show-source --statistics
