@@ -20,7 +20,7 @@ jobs:
         ports:
           - 5432:5432
         options: >-
-          --health-cmd pg_isready
+          --health-cmd "pg_isready -U devforge -d devforge_db"
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
@@ -60,7 +60,22 @@ jobs:
           ENVIRONMENT: test
         run: |
           cd backend
-          pytest -v --tb=short
+          python -c "
+          import subprocess, sys
+
+          proc = subprocess.run(['pytest', '-v', '--tb=short'], capture_output=True, text=True)
+          print(proc.stdout)
+          if proc.stderr:
+              print(proc.stderr, file=sys.stderr)
+
+          if proc.returncode != 0:
+              failures = [l for l in proc.stdout.splitlines() if l.startswith('FAILED ') or l.startswith('ERROR ')]
+              if not failures:
+                  failures = [l for l in (proc.stdout + '\n' + proc.stderr).splitlines() if 'Error' in l or 'Exception' in l]
+              for f in failures[:20]:
+                  print(f'::error title=PytestFailure::{f}')
+              sys.exit(proc.returncode)
+          "
 
   frontend-check:
     name: Frontend Typecheck & Build
