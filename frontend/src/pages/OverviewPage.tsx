@@ -45,12 +45,12 @@ export const OverviewPage: React.FC<OverviewPageProps> = ({
   const recentActivity = data?.recent_activity || [];
 
   return (
-    <div className="p-6 max-w-7xl mx-auto space-y-6">
+    <div className="p-6 max-w-7xl mx-auto space-y-6 w-full overflow-hidden">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-2 border-b border-zinc-800/80">
         <div>
           <h1 className="text-xl font-bold tracking-tight text-white flex items-center gap-2">
-            Overview
+            Platform Overview
           </h1>
           <p className="text-xs text-zinc-400 mt-1">
             Manage applications, deployments, environments, and infrastructure.

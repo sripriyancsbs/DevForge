@@ -92,13 +92,41 @@ def run_phase2_migrations():
         # Phase 3 Migrations: GitHub Integration repository columns
         "ALTER TABLE applications ADD COLUMN IF NOT EXISTS repository_owner VARCHAR(100);",
         "ALTER TABLE applications ADD COLUMN IF NOT EXISTS repository_name VARCHAR(100);",
-        "ALTER TABLE applications ADD COLUMN IF NOT EXISTS repository_default_branch VARCHAR(100) DEFAULT 'main' NOT NULL;"
+        "ALTER TABLE applications ADD COLUMN IF NOT EXISTS repository_default_branch VARCHAR(100) DEFAULT 'main' NOT NULL;",
+        # Phase 4 Migrations: CI/CD GitHub Actions columns
+        "ALTER TABLE applications ADD COLUMN IF NOT EXISTS ci_status VARCHAR(30) DEFAULT 'UNKNOWN' NOT NULL;",
+        "ALTER TABLE applications ADD COLUMN IF NOT EXISTS ci_workflow VARCHAR(100) DEFAULT 'CI';",
+        "ALTER TABLE applications ADD COLUMN IF NOT EXISTS ci_run_id VARCHAR(100);",
+        "ALTER TABLE applications ADD COLUMN IF NOT EXISTS ci_run_url VARCHAR(255);",
+        "ALTER TABLE applications ADD COLUMN IF NOT EXISTS ci_last_run_at TIMESTAMPTZ;",
+        "CREATE INDEX IF NOT EXISTS ix_applications_ci_status ON applications (ci_status);",
+        # Phase 5 Migrations: Container Image Management (GHCR)
+        """CREATE TABLE IF NOT EXISTS container_images (
+            id SERIAL PRIMARY KEY,
+            application_id INTEGER NOT NULL REFERENCES applications(id) ON DELETE CASCADE,
+            registry VARCHAR(100) DEFAULT 'ghcr.io' NOT NULL,
+            image_repository VARCHAR(255) NOT NULL,
+            image_tag VARCHAR(128) NOT NULL,
+            image_digest VARCHAR(255),
+            commit_sha VARCHAR(100),
+            status VARCHAR(30) DEFAULT 'PENDING' NOT NULL,
+            created_at TIMESTAMPTZ DEFAULT NOW(),
+            updated_at TIMESTAMPTZ DEFAULT NOW()
+        );""",
+        "CREATE INDEX IF NOT EXISTS ix_container_images_app_id ON container_images (application_id);",
+        "CREATE INDEX IF NOT EXISTS ix_container_images_repo ON container_images (image_repository);",
+        "CREATE INDEX IF NOT EXISTS ix_container_images_status ON container_images (status);",
+        "ALTER TABLE applications ADD COLUMN IF NOT EXISTS image_repository VARCHAR(255);",
+        "ALTER TABLE applications ADD COLUMN IF NOT EXISTS image_tag VARCHAR(128);",
+        "ALTER TABLE applications ADD COLUMN IF NOT EXISTS image_digest VARCHAR(255);",
+        "ALTER TABLE applications ADD COLUMN IF NOT EXISTS image_status VARCHAR(30) DEFAULT 'PENDING' NOT NULL;",
+        "CREATE INDEX IF NOT EXISTS ix_applications_image_status ON applications (image_status);"
     ]
     try:
         with engine.begin() as conn:
             for stmt in migration_statements:
                 conn.execute(text(stmt))
-        logger.info("DevForge PostgreSQL schema migrations (Phase 2 & Phase 3) applied successfully.")
+        logger.info("DevForge PostgreSQL schema migrations (Phase 2, 3, 4 & 5) applied successfully.")
     except Exception as e:
         logger.warning(f"Note on migrations (table may not exist yet if fresh DB): {e}")
 

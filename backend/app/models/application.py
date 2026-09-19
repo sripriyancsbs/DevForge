@@ -32,6 +32,15 @@ class Application(Base):
     provisioning_error = Column(Text, nullable=True)
     generated_path = Column(String(255), nullable=True)
     manifest_yaml = Column(Text, nullable=True)
+    ci_status = Column(String(30), nullable=False, default="UNKNOWN", index=True)
+    ci_workflow = Column(String(100), nullable=True, default="CI")
+    ci_run_id = Column(String(100), nullable=True)
+    ci_run_url = Column(String(255), nullable=True)
+    ci_last_run_at = Column(DateTime(timezone=True), nullable=True)
+    image_repository = Column(String(255), nullable=True, index=True)
+    image_tag = Column(String(128), nullable=True)
+    image_digest = Column(String(255), nullable=True)
+    image_status = Column(String(30), nullable=False, default="PENDING", index=True)
     last_deployment_at = Column(DateTime(timezone=True), default=utcnow)
     created_at = Column(DateTime(timezone=True), default=utcnow, index=True)
     updated_at = Column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
@@ -54,6 +63,12 @@ class Application(Base):
         back_populates="application",
         cascade="all, delete-orphan",
         order_by="desc(ProvisioningJob.created_at)"
+    )
+    container_images = relationship(
+        "ContainerImage",
+        back_populates="application",
+        cascade="all, delete-orphan",
+        order_by="desc(ContainerImage.created_at)"
     )
 
     __table_args__ = (

@@ -162,10 +162,22 @@ class RepositoryService:
         auth_push_target = clean_remote_url.replace("https://", f"https://x-access-token:{effective_token}@")
 
         logger.info(f"Pushing project files from {project_dir} to {clean_remote_url} ({default_branch})...")
+        # Do NOT pass '-u' to git push with auth_push_target, because git will save
+        # auth_push_target (containing the secret token) into .git/config as the upstream branch URL.
         self._run_git(
-            ["git", "push", "-u", auth_push_target, f"HEAD:{default_branch}"],
+            ["git", "push", auth_push_target, f"HEAD:{default_branch}"],
             project_dir,
             token=effective_token
+        )
+
+        # Explicitly configure branch upstream tracking to clean remote 'origin'
+        self._run_git(
+            ["git", "config", f"branch.{default_branch}.remote", "origin"],
+            project_dir
+        )
+        self._run_git(
+            ["git", "config", f"branch.{default_branch}.merge", f"refs/heads/{default_branch}"],
+            project_dir
         )
 
         commit_hash = self._run_git(["git", "rev-parse", "--short", "HEAD"], project_dir)

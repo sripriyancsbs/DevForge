@@ -136,6 +136,11 @@ export const CreateApplicationPage: React.FC<CreateApplicationPageProps> = ({
       desc: 'Synthesize standard devforge.yaml manifest specifying services, ports, and limits'
     },
     {
+      id: 'GENERATING_CI_WORKFLOW',
+      title: 'Generate CI workflow',
+      desc: 'Synthesize automated GitHub Actions CI workflow (.github/workflows/ci.yml)'
+    },
+    {
       id: 'VALIDATE_PROJECT',
       title: 'Validate project',
       desc: 'Ensure generated files, runtime entrypoints, and manifest schemas are valid'
@@ -162,6 +167,7 @@ export const CreateApplicationPage: React.FC<CreateApplicationPageProps> = ({
     'PREPARE_WORKSPACE',
     'GENERATE_PROJECT',
     'GENERATE_MANIFEST',
+    'GENERATING_CI_WORKFLOW',
     'VALIDATE_PROJECT',
     'CREATING_REPOSITORY',
     'PUSHING_REPOSITORY',

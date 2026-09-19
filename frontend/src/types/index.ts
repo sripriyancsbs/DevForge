@@ -26,9 +26,34 @@ export interface Application {
   provisioning_error?: string | null;
   generated_path?: string;
   manifest_yaml?: string;
+  ci_status?: 'UNKNOWN' | 'QUEUED' | 'RUNNING' | 'PASSED' | 'FAILED';
+  ci_workflow?: string;
+  ci_run_id?: string | null;
+  ci_run_url?: string | null;
+  ci_last_run_at?: string | null;
+  image_repository?: string | null;
+  image_tag?: string | null;
+  image_digest?: string | null;
+  image_status?: 'PENDING' | 'BUILDING' | 'PUSHING' | 'READY' | 'FAILED';
   last_deployment_at?: string;
   created_at: string;
   updated_at: string;
+}
+
+export interface ContainerImageData {
+  id?: number;
+  application_id: number;
+  registry: string;
+  repository: string;
+  tag: string;
+  digest?: string | null;
+  commit_sha?: string | null;
+  status: 'PENDING' | 'BUILDING' | 'PUSHING' | 'READY' | 'FAILED';
+  created_at?: string | null;
+  updated_at?: string | null;
+  image_repository?: string;
+  image_tag?: string;
+  image_digest?: string | null;
 }
 
 export type ProvisioningJobStep =
@@ -36,10 +61,21 @@ export type ProvisioningJobStep =
   | 'PREPARE_WORKSPACE'
   | 'GENERATE_PROJECT'
   | 'GENERATE_MANIFEST'
+  | 'GENERATING_CI_WORKFLOW'
   | 'VALIDATE_PROJECT'
   | 'CREATING_REPOSITORY'
   | 'PUSHING_REPOSITORY'
   | 'COMPLETED';
+
+export interface CIStatusData {
+  status: 'UNKNOWN' | 'QUEUED' | 'RUNNING' | 'PASSED' | 'FAILED';
+  workflow: string;
+  run_id: string | null;
+  run_url: string | null;
+  last_run_at: string | null;
+  application_id: number;
+  application_name: string;
+}
 
 export interface GitHubStatusResponse {
   connected: boolean;

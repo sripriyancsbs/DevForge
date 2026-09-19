@@ -21,9 +21,13 @@ from app.schemas.application import (
 )
 from app.schemas.deployment import DeploymentResponse
 from app.schemas.service_health import ServiceHealthResponse
+from app.schemas.ci import CIStatusResponse
+from app.schemas.image import ContainerImageResponse, ContainerImageListResponse
 from app.services.provisioning.template_service import template_service
 from app.services.provisioning.project_generator import project_generator
 from app.services.provisioning.service import provisioning_service
+from app.services.ci.workflow_service import workflow_service
+from app.services.image import image_service
 
 logger = logging.getLogger("devforge.api.applications")
 router = APIRouter()
@@ -351,4 +355,113 @@ def trigger_application_provision(
         files_generated=[],
         message=f"Provisioning triggered for application '{app.name}' (job #{job.id})."
     )
+
+
+@router.get("/{app_id_or_slug}/ci", response_model=CIStatusResponse)
+def get_application_ci_status(app_id_or_slug: str, db: Session = Depends(get_db)):
+    """Fetch GitHub Actions CI status for an application."""
+    if app_id_or_slug.isdigit():
+        app = db.query(Application).filter(Application.id == int(app_id_or_slug)).first()
+    else:
+        app = db.query(Application).filter(Application.slug == app_id_or_slug.lower()).first()
+
+    if not app:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Application '{app_id_or_slug}' not found."
+        )
+
+    return workflow_service.get_ci_status(app, db)
+
+
+@router.post("/{app_id_or_slug}/ci/refresh", response_model=CIStatusResponse)
+def refresh_application_ci_status(app_id_or_slug: str, db: Session = Depends(get_db)):
+    """Refresh GitHub Actions CI status from remote GitHub repository."""
+    if app_id_or_slug.isdigit():
+        app = db.query(Application).filter(Application.id == int(app_id_or_slug)).first()
+    else:
+        app = db.query(Application).filter(Application.slug == app_id_or_slug.lower()).first()
+
+    if not app:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Application '{app_id_or_slug}' not found."
+        )
+
+    return workflow_service.refresh_ci_status(app, db)
+
+
+@router.get("/{app_id_or_slug}/images", response_model=ContainerImageListResponse)
+def get_application_images(app_id_or_slug: str, db: Session = Depends(get_db)):
+    """Fetch all tracked container images for an application."""
+    if app_id_or_slug.isdigit():
+        app = db.query(Application).filter(Application.id == int(app_id_or_slug)).first()
+    else:
+        app = db.query(Application).filter(Application.slug == app_id_or_slug.lower()).first()
+
+    if not app:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Application '{app_id_or_slug}' not found."
+        )
+
+    # Sync latest image status
+    image_service.sync_application_image(app, db)
+    images = image_service.get_application_images(app.id, db)
+    latest = image_service.get_latest_image(app.id, db)
+
+    return ContainerImageListResponse(
+        images=[ContainerImageResponse.from_orm_model(img) for img in images],
+        total=len(images),
+        latest=ContainerImageResponse.from_orm_model(latest) if latest else None
+    )
+
+
+@router.get("/{app_id_or_slug}/images/latest", response_model=ContainerImageResponse)
+def get_latest_application_image(app_id_or_slug: str, db: Session = Depends(get_db)):
+    """Fetch the latest container image metadata for an application."""
+    if app_id_or_slug.isdigit():
+        app = db.query(Application).filter(Application.id == int(app_id_or_slug)).first()
+    else:
+        app = db.query(Application).filter(Application.slug == app_id_or_slug.lower()).first()
+
+    if not app:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Application '{app_id_or_slug}' not found."
+        )
+
+    # Sync latest image status
+    latest = image_service.sync_application_image(app, db)
+    if not latest:
+        latest = image_service.get_latest_image(app.id, db)
+
+    if not latest:
+        latest = image_service.record_initial_image(app, app.version, db)
+
+    return ContainerImageResponse.from_orm_model(latest)
+
+
+@router.post("/{app_id_or_slug}/images/sync", response_model=ContainerImageResponse)
+def sync_application_image_endpoint(app_id_or_slug: str, db: Session = Depends(get_db)):
+    """Force synchronize container image metadata with GHCR / GitHub Actions."""
+    if app_id_or_slug.isdigit():
+        app = db.query(Application).filter(Application.id == int(app_id_or_slug)).first()
+    else:
+        app = db.query(Application).filter(Application.slug == app_id_or_slug.lower()).first()
+
+    if not app:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Application '{app_id_or_slug}' not found."
+        )
+
+    synced = image_service.sync_application_image(app, db)
+    if not synced:
+        synced = image_service.get_latest_image(app.id, db)
+    if not synced:
+        synced = image_service.record_initial_image(app, app.version, db)
+
+    return ContainerImageResponse.from_orm_model(synced)
+
 

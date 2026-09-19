@@ -8,7 +8,9 @@ import {
   MonitoringData,
   Activity,
   ProvisioningJob,
-  GitHubStatusResponse
+  GitHubStatusResponse,
+  CIStatusData,
+  ContainerImageData
 } from '../types';
 
 const API_BASE = (import.meta as any).env?.VITE_API_BASE_URL || '/api/v1';
@@ -157,6 +159,42 @@ export const api = {
       const err = await res.json().catch(() => ({ detail: 'Failed to trigger reprovisioning' }));
       throw new Error(err.detail || 'Failed to trigger reprovisioning');
     }
+    return res.json();
+  },
+
+  async getApplicationCI(appId: number): Promise<CIStatusData> {
+    const res = await fetch(`${API_BASE}/applications/${appId}/ci`);
+    if (!res.ok) throw new Error(`HTTP ${res.status}: Failed to fetch CI status for application #${appId}`);
+    return res.json();
+  },
+
+  async refreshApplicationCI(appId: number): Promise<CIStatusData> {
+    const res = await fetch(`${API_BASE}/applications/${appId}/ci/refresh`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' }
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}: Failed to refresh CI status for application #${appId}`);
+    return res.json();
+  },
+
+  async getApplicationImages(appId: number): Promise<{ images: ContainerImageData[]; total: number; latest?: ContainerImageData }> {
+    const res = await fetch(`${API_BASE}/applications/${appId}/images`);
+    if (!res.ok) throw new Error(`HTTP ${res.status}: Failed to fetch images for application #${appId}`);
+    return res.json();
+  },
+
+  async getLatestApplicationImage(appId: number): Promise<ContainerImageData> {
+    const res = await fetch(`${API_BASE}/applications/${appId}/images/latest`);
+    if (!res.ok) throw new Error(`HTTP ${res.status}: Failed to fetch latest image for application #${appId}`);
+    return res.json();
+  },
+
+  async syncApplicationImage(appId: number): Promise<ContainerImageData> {
+    const res = await fetch(`${API_BASE}/applications/${appId}/images/sync`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' }
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}: Failed to sync container image for application #${appId}`);
     return res.json();
   }
 };
