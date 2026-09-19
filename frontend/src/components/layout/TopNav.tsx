@@ -142,7 +142,7 @@ export const TopNav: React.FC<TopNavProps> = ({
           </button>
 
           {showNotifications && (
-            <div id="notifications-panel" data-testid="notifications-panel" className="absolute right-0 mt-2 w-[calc(100vw-2rem)] max-w-sm sm:w-96 rounded-md border border-zinc-800 bg-[#121215] shadow-2xl z-50 overflow-hidden">
+            <div id="notifications-panel" data-testid="notifications-panel" className="fixed sm:absolute left-4 sm:left-auto right-4 sm:right-0 top-14 sm:top-full mt-2 sm:w-96 rounded-md border border-zinc-800 bg-[#121215] shadow-2xl z-50 overflow-hidden">
               <div className="p-3 border-b border-zinc-800 flex items-center justify-between">
                 <span className="text-xs font-semibold text-zinc-200">System Notifications</span>
                 <span className="text-[10px] font-mono bg-zinc-800 text-zinc-400 px-1.5 py-0.5 rounded">

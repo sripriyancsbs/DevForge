@@ -141,7 +141,7 @@ export const InfrastructurePage: React.FC = () => {
   };
 
   return (
-    <div className="p-6 max-w-7xl mx-auto space-y-6">
+    <div className="p-4 sm:p-6 max-w-7xl mx-auto space-y-6 w-full min-w-0">
       {/* Header */}
       <div className="pb-2 border-b border-zinc-800/80">
         <h1 className="text-xl font-bold tracking-tight text-white flex items-center gap-2">
@@ -370,7 +370,7 @@ export const InfrastructurePage: React.FC = () => {
         </div>
 
         <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs font-mono" id="terraform-runs-table">
+          <table className="w-full text-left text-xs font-mono min-w-[640px] lg:min-w-full" id="terraform-runs-table">
             <thead className="bg-[#09090b] text-zinc-400 border-b border-zinc-800">
               <tr>
                 <th className="px-4 py-2.5 font-medium">Run ID</th>
@@ -442,7 +442,7 @@ export const InfrastructurePage: React.FC = () => {
         </div>
 
         <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs">
+          <table className="w-full text-left text-xs min-w-[700px] lg:min-w-full">
             <thead className="bg-[#0e0e11] border-b border-zinc-800 text-[11px] font-mono uppercase text-zinc-400">
               <tr>
                 <th className="py-2.5 px-4 font-medium">Cluster Name</th>
@@ -491,7 +491,7 @@ export const InfrastructurePage: React.FC = () => {
         </div>
 
         <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs">
+          <table className="w-full text-left text-xs min-w-[600px] lg:min-w-full">
             <thead className="bg-[#0e0e11] border-b border-zinc-800 text-[11px] font-mono uppercase text-zinc-400">
               <tr>
                 <th className="py-2.5 px-4 font-medium">Datastore Name</th>

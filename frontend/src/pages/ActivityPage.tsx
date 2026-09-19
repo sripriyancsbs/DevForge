@@ -210,7 +210,7 @@ export const ActivityPage: React.FC<ActivityPageProps> = ({ onSelectApplication 
                 </div>
 
                 {act.details && (
-                  <div className="text-zinc-400 text-[11px] mt-1 font-sans">
+                  <div className="text-zinc-400 text-[11px] mt-1 font-sans break-words">
                     {act.details}
                   </div>
                 )}

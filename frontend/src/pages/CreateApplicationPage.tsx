@@ -313,7 +313,7 @@ export const CreateApplicationPage: React.FC<CreateApplicationPageProps> = ({
   // 1. PROVISIONING PROGRESS SCREEN
   if (stage === 'provisioning') {
     return (
-      <div className="p-8 max-w-2xl mx-auto space-y-6 animate-in fade-in duration-200">
+      <div className="p-4 sm:p-8 max-w-2xl mx-auto space-y-6 w-full min-w-0 animate-in fade-in duration-200">
         <div className="border border-zinc-800 bg-[#0e0e11] rounded-lg p-6 space-y-6 shadow-xl">
           <div className="flex items-center justify-between pb-4 border-b border-zinc-800">
             <div className="flex items-center gap-3">
@@ -523,7 +523,7 @@ export const CreateApplicationPage: React.FC<CreateApplicationPageProps> = ({
   // 3. FAILURE SCREEN: PROVISIONING FAILED
   if (stage === 'failed') {
     return (
-      <div className="p-8 max-w-xl mx-auto space-y-6 animate-in fade-in duration-200">
+      <div className="p-4 sm:p-8 max-w-xl mx-auto space-y-6 w-full min-w-0 animate-in fade-in duration-200">
         <div className="border border-red-500/40 bg-[#0e0e11] rounded-lg p-6 space-y-6 shadow-2xl">
           <div className="flex items-start gap-3.5">
             <div className="w-10 h-10 rounded-full bg-red-500/20 border border-red-500 flex items-center justify-center text-red-400 shrink-0">
@@ -583,7 +583,7 @@ export const CreateApplicationPage: React.FC<CreateApplicationPageProps> = ({
 
   // 4. WIZARD FORM (Steps 1, 2, 3)
   return (
-    <div className="p-6 max-w-5xl mx-auto space-y-6">
+    <div className="p-4 sm:p-6 max-w-5xl mx-auto space-y-6 w-full min-w-0">
       {/* Header */}
       <div className="flex items-center gap-3 pb-2 border-b border-zinc-800/80">
         <button
@@ -603,7 +603,7 @@ export const CreateApplicationPage: React.FC<CreateApplicationPageProps> = ({
       </div>
 
       {/* Progress Steps Indicator */}
-      <div className="grid grid-cols-3 gap-2 text-xs font-mono">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs font-mono">
         {[
           { num: 1, title: 'Basics & Identity' },
           { num: 2, title: 'Runtime & Template' },
@@ -789,7 +789,7 @@ export const CreateApplicationPage: React.FC<CreateApplicationPageProps> = ({
                   <label className="text-xs font-semibold text-zinc-200">
                     Target Environment
                   </label>
-                  <div className="grid grid-cols-3 gap-2 text-xs font-mono">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs font-mono">
                     {['development', 'staging', 'production'].map((env) => (
                       <button
                         type="button"
@@ -807,7 +807,7 @@ export const CreateApplicationPage: React.FC<CreateApplicationPageProps> = ({
                   </div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div className="space-y-1.5">
                     <label className="text-xs font-semibold text-zinc-200">
                       Container Port

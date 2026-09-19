@@ -37,7 +37,7 @@ export const DeploymentsPage: React.FC<DeploymentsPageProps> = ({
   });
 
   return (
-    <div className="p-6 max-w-7xl mx-auto space-y-6">
+    <div className="p-4 sm:p-6 max-w-7xl mx-auto space-y-6 w-full min-w-0">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-2 border-b border-zinc-800/80">
         <div>
@@ -85,7 +85,7 @@ export const DeploymentsPage: React.FC<DeploymentsPageProps> = ({
       {/* Deployments Table */}
       <div className="border border-zinc-800 bg-[#121215] rounded-md overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs">
+          <table className="w-full text-left text-xs min-w-[760px] lg:min-w-full">
             <thead className="bg-[#0e0e11] border-b border-zinc-800 text-[11px] font-mono uppercase text-zinc-400">
               <tr>
                 <th className="py-2.5 px-4 font-medium">Application</th>

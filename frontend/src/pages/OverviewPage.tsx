@@ -151,9 +151,9 @@ export const OverviewPage: React.FC<OverviewPageProps> = ({
       </div>
 
       {/* Main Grid: Platform Deployments & Service Health */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 min-w-0">
         {/* Table 1: Recent Platform Deployments */}
-        <div className="border border-zinc-800 bg-[#121215] rounded-md overflow-hidden flex flex-col">
+        <div className="border border-zinc-800 bg-[#121215] rounded-md overflow-hidden flex flex-col min-w-0">
           <div className="px-4 py-3 border-b border-zinc-800 flex items-center justify-between">
             <div className="flex items-center gap-2">
               <GitCommit className="w-4 h-4 text-zinc-400" />
@@ -170,7 +170,7 @@ export const OverviewPage: React.FC<OverviewPageProps> = ({
           </div>
 
           <div className="overflow-x-auto flex-1">
-            <table className="w-full text-left text-xs">
+            <table className="w-full text-left text-xs min-w-[540px] lg:min-w-full">
               <thead className="bg-[#0e0e11] border-b border-zinc-800 text-[11px] uppercase text-zinc-400">
                 <tr>
                   <th className="py-2.5 px-4 font-medium">Application</th>
@@ -214,7 +214,7 @@ export const OverviewPage: React.FC<OverviewPageProps> = ({
         </div>
 
         {/* Table 2: Service Health */}
-        <div className="border border-zinc-800 bg-[#121215] rounded-md overflow-hidden flex flex-col">
+        <div className="border border-zinc-800 bg-[#121215] rounded-md overflow-hidden flex flex-col min-w-0">
           <div className="px-4 py-3 border-b border-zinc-800 flex items-center justify-between">
             <div className="flex items-center gap-2">
               <Server className="w-4 h-4 text-zinc-400" />
@@ -228,7 +228,7 @@ export const OverviewPage: React.FC<OverviewPageProps> = ({
           </div>
 
           <div className="overflow-x-auto flex-1">
-            <table className="w-full text-left text-xs">
+            <table className="w-full text-left text-xs min-w-[480px] lg:min-w-full">
               <thead className="bg-[#0e0e11] border-b border-zinc-800 text-[11px] uppercase text-zinc-400">
                 <tr>
                   <th className="py-2.5 px-4 font-medium">Service</th>
@@ -299,9 +299,9 @@ export const OverviewPage: React.FC<OverviewPageProps> = ({
                 onClick={() => onSelectApplication(act.target)}
                 className="p-3.5 hover:bg-zinc-800/40 cursor-pointer flex items-center justify-between gap-3 transition group"
               >
-                <div className="flex items-center gap-2.5">
+                <div className="flex items-center gap-2.5 min-w-0">
                   <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0" />
-                  <div>
+                  <div className="min-w-0 truncate">
                     <span className="font-semibold text-white group-hover:text-emerald-400 transition">
                       {act.action}
                     </span>

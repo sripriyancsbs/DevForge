@@ -205,7 +205,7 @@ export const AutomationPage: React.FC = () => {
   const currentPlaybookMeta = playbooks.find((p) => p.name === selectedPlaybook);
 
   return (
-    <div className="p-6 max-w-7xl mx-auto space-y-6">
+    <div className="p-4 sm:p-6 max-w-7xl mx-auto space-y-6 w-full min-w-0">
       {/* Header */}
       <div className="pb-2 border-b border-zinc-800/80 flex flex-wrap items-center justify-between gap-4">
         <div>
@@ -445,7 +445,7 @@ export const AutomationPage: React.FC = () => {
         </div>
 
         <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs font-mono" id="ansible-executions-table">
+          <table className="w-full text-left text-xs font-mono min-w-[700px] lg:min-w-full" id="ansible-executions-table">
             <thead className="bg-[#09090b] text-zinc-400 border-b border-zinc-800">
               <tr>
                 <th className="px-4 py-2.5 font-medium">Run ID</th>

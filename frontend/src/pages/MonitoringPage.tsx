@@ -107,7 +107,7 @@ export const MonitoringPage: React.FC = () => {
   const grafanaUrl = health?.grafana?.dashboard_url || 'http://localhost:3001';
 
   return (
-    <div className="p-6 max-w-7xl mx-auto space-y-6">
+    <div className="p-4 sm:p-6 max-w-7xl mx-auto space-y-6 w-full min-w-0">
       {/* Header & Direct External Monitoring Links */}
       <div className="flex flex-col md:flex-row md:items-center justify-between pb-4 border-b border-zinc-800/80 gap-4">
         <div>
@@ -384,7 +384,7 @@ export const MonitoringPage: React.FC = () => {
         {/* Tab 1: Monitored Services */}
         {activeTab === 'services' && (
           <div className="overflow-x-auto" id="monitoring-services-table">
-            <table className="w-full text-left text-xs font-mono">
+            <table className="w-full text-left text-xs font-mono min-w-[640px] lg:min-w-full">
               <thead className="bg-[#09090b] border-b border-zinc-800 text-[11px] uppercase text-zinc-400">
                 <tr>
                   <th className="py-2.5 px-4 font-medium">Service</th>
@@ -419,7 +419,7 @@ export const MonitoringPage: React.FC = () => {
         {/* Tab 2: Prometheus Targets */}
         {activeTab === 'targets' && (
           <div className="overflow-x-auto" id="monitoring-targets-table">
-            <table className="w-full text-left text-xs font-mono">
+            <table className="w-full text-left text-xs font-mono min-w-[600px] lg:min-w-full">
               <thead className="bg-[#09090b] border-b border-zinc-800 text-[11px] uppercase text-zinc-400">
                 <tr>
                   <th className="py-2.5 px-4 font-medium">Job</th>
@@ -451,7 +451,7 @@ export const MonitoringPage: React.FC = () => {
         {/* Tab 3: Alert Rules */}
         {activeTab === 'alerts' && (
           <div className="overflow-x-auto" id="monitoring-alerts-table">
-            <table className="w-full text-left text-xs font-mono">
+            <table className="w-full text-left text-xs font-mono min-w-[640px] lg:min-w-full">
               <thead className="bg-[#09090b] border-b border-zinc-800 text-[11px] uppercase text-zinc-400">
                 <tr>
                   <th className="py-2.5 px-4 font-medium">Alert Rule</th>

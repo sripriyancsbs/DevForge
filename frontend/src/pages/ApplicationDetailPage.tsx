@@ -975,7 +975,7 @@ spec:
 
           <div className="border border-zinc-800 bg-[#121215] rounded-md overflow-hidden">
             <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs">
+              <table className="w-full text-left text-xs min-w-[720px] lg:min-w-full">
                 <thead className="bg-[#0e0e11] border-b border-zinc-800 text-[11px] uppercase text-zinc-400">
                   <tr>
                     <th className="py-2.5 px-4 font-medium">Version</th>
@@ -1603,7 +1603,7 @@ spec:
                 <div className="p-6 text-center text-xs text-zinc-500">No remediation policies loaded.</div>
               ) : (
                 <div className="overflow-x-auto">
-                  <table className="w-full text-left text-xs">
+                  <table className="w-full text-left text-xs min-w-[650px] lg:min-w-full">
                     <thead className="bg-zinc-950/60 border-b border-zinc-800 text-zinc-400 font-semibold">
                       <tr>
                         <th className="p-3">Policy</th>
