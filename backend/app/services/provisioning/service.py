@@ -17,6 +17,7 @@ from app.services.provisioning.template_service import template_service
 from app.services.provisioning.project_generator import project_generator
 from app.services.github.repository_service import repository_service
 from app.services.github.github_client import scrub_credentials
+from app.services.ci.workflow_service import workflow_service
 from app.services.github.exceptions import (
     GitHubIntegrationError,
     GitHubConfigurationError,
@@ -159,7 +160,30 @@ class ProvisioningService:
             job.current_step = "GENERATE_MANIFEST"
             db.commit()
 
-            # STEP 5: VALIDATE_PROJECT
+            # STEP 5: GENERATING_CI_WORKFLOW
+            job.current_step = "GENERATING_CI_WORKFLOW"
+            db.commit()
+
+            project_dir = project_generator.get_isolated_workspace(app.id)
+            workflow_service.generate_ci_workflow(
+                workspace_path=project_dir,
+                template_id=template_id,
+                app_name=app.name,
+                app_port=app.port
+            )
+
+            db.add(Activity(
+                actor="devforge.worker",
+                action="GitHub Actions CI workflow generated",
+                target=f"{app.name} (.github/workflows/ci.yml)",
+                target_type="ci",
+                status="completed",
+                details=f"Synthesized GitHub Actions CI workflow for template '{template_id}'",
+                created_at=utcnow()
+            ))
+            db.commit()
+
+            # STEP 6: VALIDATE_PROJECT
             job.current_step = "VALIDATE_PROJECT"
             db.commit()
             project_generator.validate_generated_project(app.id, template_id)
@@ -243,6 +267,19 @@ class ProvisioningService:
                 target_type="repository",
                 status="completed",
                 details=f"Successfully pushed commit {commit_hash} to {app.repository_url} ({app.repository_default_branch})",
+                created_at=utcnow()
+            ))
+
+            # Phase 5: Record initial Container Image (GHCR) and Docker build activity
+            from app.services.image import image_service
+            image_service.record_initial_image(app, commit_hash, db)
+            db.add(Activity(
+                actor="devforge.ci",
+                action="Docker build started",
+                target=app.name,
+                target_type="image",
+                status="in_progress",
+                details=f"Automated Docker build & GHCR publish triggered for commit {commit_hash}",
                 created_at=utcnow()
             ))
             db.commit()

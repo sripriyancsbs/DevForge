@@ -48,7 +48,8 @@ def test_scrub_generic_tokens():
 # 2. GITHUB CLIENT & AUTHENTICATION TESTS
 # ==============================================================================
 
-def test_github_client_missing_token():
+def test_github_client_missing_token(monkeypatch):
+    monkeypatch.setattr("app.core.config.settings.GITHUB_TOKEN", "")
     client = GitHubClient(token=None, owner="test-owner")
     status = client.check_connection()
     assert status["connected"] is False

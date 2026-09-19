@@ -1,6 +1,6 @@
 import re
 import logging
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 import httpx
 
 from app.core.config import settings
@@ -212,11 +212,151 @@ class GitHubClient:
                 else:
                     err_msg = scrub_credentials(res.text, self._token)
                     raise GitHubAPIUnavailableError(f"GitHub repository creation failed (HTTP {res.status_code}): {err_msg}")
-
         except (httpx.ConnectTimeout, httpx.ReadTimeout):
             raise GitHubAPIUnavailableError("GitHub API repository creation timed out.")
         except httpx.RequestError as exc:
             raise GitHubAPIUnavailableError(f"GitHub API network error: {scrub_credentials(str(exc), self._token)}")
+
+    def get_workflow_runs(self, repo_name: str, branch: str = "main") -> List[Dict[str, Any]]:
+        """
+        Fetch recent GitHub Actions workflow runs for a repository.
+        """
+        if not self._token:
+            raise GitHubConfigurationError("GITHUB_TOKEN is not configured.")
+
+        url = f"{self.BASE_URL}/repos/{self.owner}/{repo_name}/actions/runs"
+        params = {"branch": branch, "per_page": 5}
+        try:
+            with httpx.Client(timeout=15.0) as client:
+                res = client.get(url, headers=self._headers(), params=params)
+                if res.status_code == 200:
+                    data = res.json()
+                    runs = data.get("workflow_runs", [])
+                    cleaned_runs = []
+                    for r in runs:
+                        cleaned_runs.append({
+                            "id": r.get("id"),
+                            "name": r.get("name", "CI"),
+                            "status": r.get("status"),          # queued, in_progress, completed
+                            "conclusion": r.get("conclusion"),  # success, failure, cancelled, timed_out
+                            "html_url": r.get("html_url"),
+                            "head_branch": r.get("head_branch"),
+                            "head_sha": r.get("head_sha"),
+                            "created_at": r.get("created_at"),
+                            "updated_at": r.get("updated_at")
+                        })
+                    return cleaned_runs
+                elif res.status_code == 404:
+                    return []
+                elif res.status_code == 401:
+                    raise GitHubAuthenticationError()
+                elif res.status_code == 403:
+                    if "rate limit" in res.text.lower():
+                        raise GitHubRateLimitError()
+                    raise GitHubPermissionError()
+                else:
+                    raise GitHubAPIUnavailableError(f"GitHub Actions API returned HTTP {res.status_code}.")
+        except (httpx.ConnectTimeout, httpx.ReadTimeout):
+            raise GitHubAPIUnavailableError("GitHub Actions API request timed out.")
+        except httpx.RequestError as exc:
+            raise GitHubAPIUnavailableError(f"GitHub Actions network error: {scrub_credentials(str(exc), self._token)}")
+
+    def get_workflow_run_jobs(self, repo_name: str, run_id: int) -> List[Dict[str, Any]]:
+        """
+        Fetch jobs and steps for a specific workflow run.
+        """
+        if not self._token:
+            raise GitHubConfigurationError("GITHUB_TOKEN is not configured.")
+
+        url = f"{self.BASE_URL}/repos/{self.owner}/{repo_name}/actions/runs/{run_id}/jobs"
+        try:
+            with httpx.Client(timeout=15.0) as client:
+                res = client.get(url, headers=self._headers())
+                if res.status_code == 200:
+                    data = res.json()
+                    jobs = data.get("jobs", [])
+                    cleaned_jobs = []
+                    for j in jobs:
+                        cleaned_jobs.append({
+                            "id": j.get("id"),
+                            "name": j.get("name"),
+                            "status": j.get("status"),
+                            "conclusion": j.get("conclusion"),
+                            "steps": [
+                                {
+                                    "name": s.get("name"),
+                                    "status": s.get("status"),
+                                    "conclusion": s.get("conclusion")
+                                }
+                                for s in j.get("steps", [])
+                            ]
+                        })
+                    return cleaned_jobs
+                elif res.status_code == 404:
+                    return []
+                else:
+                    return []
+        except Exception as exc:
+            logger.warning(f"Failed to fetch workflow run jobs: {exc}")
+            return []
+
+    def get_workflow_job_logs(self, repo_name: str, job_id: int) -> str:
+        """
+        Fetch logs text for a specific workflow job.
+        """
+        if not self._token:
+            return ""
+
+        url = f"{self.BASE_URL}/repos/{self.owner}/{repo_name}/actions/jobs/{job_id}/logs"
+        try:
+            with httpx.Client(timeout=20.0, follow_redirects=True) as client:
+                res = client.get(url, headers=self._headers())
+                if res.status_code == 200:
+                    return res.text
+                return ""
+        except Exception as exc:
+            logger.warning(f"Failed to fetch workflow job logs: {exc}")
+            return ""
+
+    def get_package_version(self, package_name: str, version_tag: Optional[str] = None) -> Optional[Dict[str, Any]]:
+        """
+        Safely check if a package version exists in GHCR via GitHub Packages API.
+        Returns None if not accessible or 404/403.
+        """
+        if not self._token:
+            return None
+
+        # Clean package name to lowercase
+        pkg = (package_name or "").lower().strip()
+        url = f"{self.BASE_URL}/users/{self.owner}/packages/container/{pkg}/versions"
+        try:
+            with httpx.Client(timeout=10.0) as client:
+                res = client.get(url, headers=self._headers())
+                if res.status_code == 200:
+                    versions = res.json()
+                    if not versions:
+                        return None
+                    if version_tag:
+                        for v in versions:
+                            tags = v.get("metadata", {}).get("container", {}).get("tags", [])
+                            if version_tag in tags:
+                                return {
+                                    "id": v.get("id"),
+                                    "name": v.get("name"), # digest
+                                    "tags": tags,
+                                    "updated_at": v.get("updated_at")
+                                }
+                    # Return latest version
+                    latest = versions[0]
+                    return {
+                        "id": latest.get("id"),
+                        "name": latest.get("name"),
+                        "tags": latest.get("metadata", {}).get("container", {}).get("tags", []),
+                        "updated_at": latest.get("updated_at")
+                    }
+                return None
+        except Exception:
+            return None
 
 
 github_client = GitHubClient()

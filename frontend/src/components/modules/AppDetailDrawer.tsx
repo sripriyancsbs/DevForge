@@ -13,9 +13,11 @@ import {
   Check,
   Cpu,
   Server,
-  Github
+  Github,
+  RefreshCw,
+  Package
 } from 'lucide-react';
-import { Application, Deployment, ServiceHealth } from '../../types';
+import { Application, Deployment, ServiceHealth, CIStatusData, ContainerImageData } from '../../types';
 import { StatusBadge } from '../common/StatusBadge';
 import { api } from '../../services/api';
 
@@ -41,9 +43,54 @@ export const AppDetailDrawer: React.FC<AppDetailDrawerProps> = ({
   const [manifestContent, setManifestContent] = useState<string>('');
   const [copied, setCopied] = useState(false);
   const [loadingManifest, setLoadingManifest] = useState(false);
+  const [ciData, setCiData] = useState<CIStatusData | null>(null);
+  const [refreshingCI, setRefreshingCI] = useState(false);
+  const [imageData, setImageData] = useState<ContainerImageData | null>(null);
+  const [refreshingImage, setRefreshingImage] = useState(false);
+  const [imageCopied, setImageCopied] = useState(false);
 
   useEffect(() => {
     if (!app) return;
+
+    // Fetch CI status
+    api.getApplicationCI(app.id)
+      .then((data) => setCiData(data))
+      .catch(() => {
+        setCiData({
+          status: (app.ci_status as any) || 'UNKNOWN',
+          workflow: app.ci_workflow || 'CI',
+          run_id: app.ci_run_id || null,
+          run_url: app.ci_run_url || null,
+          last_run_at: app.ci_last_run_at || null,
+          application_id: app.id,
+          application_name: app.name
+        });
+      });
+
+    // Fetch Container Image metadata
+    api.getLatestApplicationImage(app.id)
+      .then((img) => setImageData(img))
+      .catch(() => {
+        if (app.image_repository) {
+          setImageData({
+            application_id: app.id,
+            registry: 'ghcr.io',
+            repository: app.image_repository,
+            image_repository: app.image_repository,
+            tag: app.image_tag || 'latest',
+            image_tag: app.image_tag || 'latest',
+            status: (app.image_status as any) || 'PENDING',
+            digest: app.image_digest || null,
+            image_digest: app.image_digest || null,
+            commit_sha: null,
+            created_at: null,
+            updated_at: null
+          });
+        } else {
+          setImageData(null);
+        }
+      });
+
     if (app.manifest_yaml) {
       setManifestContent(app.manifest_yaml);
     } else {
@@ -83,6 +130,70 @@ spec:
   }, [app]);
 
   if (!app) return null;
+
+  const handleRefreshCI = async () => {
+    if (!app) return;
+    setRefreshingCI(true);
+    try {
+      const refreshed = await api.refreshApplicationCI(app.id);
+      setCiData(refreshed);
+    } catch (err) {
+      console.error("Failed to refresh CI status", err);
+    } finally {
+      setRefreshingCI(false);
+    }
+  };
+
+  const getCIBadge = (status?: string) => {
+    const s = (status || 'UNKNOWN').toUpperCase();
+    if (s === 'PASSED') {
+      return <span className="px-2 py-0.5 rounded text-[10px] font-mono bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">PASSED</span>;
+    }
+    if (s === 'RUNNING' || s === 'QUEUED') {
+      return <span className="px-2 py-0.5 rounded text-[10px] font-mono bg-blue-500/15 text-blue-400 border border-blue-500/30 animate-pulse">{s}</span>;
+    }
+    if (s === 'FAILED') {
+      return <span className="px-2 py-0.5 rounded text-[10px] font-mono bg-red-500/15 text-red-400 border border-red-500/30">FAILED</span>;
+    }
+    return <span className="px-2 py-0.5 rounded text-[10px] font-mono bg-zinc-800 text-zinc-400 border border-zinc-700">UNKNOWN</span>;
+  };
+
+  const getImageStatusBadge = (status?: string) => {
+    const s = (status || 'PENDING').toUpperCase();
+    if (s === 'READY') {
+      return <span className="px-2 py-0.5 rounded text-[10px] font-mono bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">READY</span>;
+    }
+    if (s === 'BUILDING' || s === 'PUSHING') {
+      return <span className="px-2 py-0.5 rounded text-[10px] font-mono bg-purple-500/15 text-purple-400 border border-purple-500/30 animate-pulse">{s}</span>;
+    }
+    if (s === 'FAILED') {
+      return <span className="px-2 py-0.5 rounded text-[10px] font-mono bg-red-500/15 text-red-400 border border-red-500/30">FAILED</span>;
+    }
+    return <span className="px-2 py-0.5 rounded text-[10px] font-mono bg-zinc-800 text-zinc-400 border border-zinc-700">{s}</span>;
+  };
+
+  const handleRefreshImage = async () => {
+    if (!app) return;
+    setRefreshingImage(true);
+    try {
+      const refreshed = await api.syncApplicationImage(app.id);
+      setImageData(refreshed);
+    } catch (err) {
+      console.error("Failed to sync container image", err);
+    } finally {
+      setRefreshingImage(false);
+    }
+  };
+
+  const handleCopyImageRef = () => {
+    const repo = imageData?.repository || imageData?.image_repository || app.image_repository;
+    const tag = imageData?.tag || imageData?.image_tag || app.image_tag || 'latest';
+    if (!repo) return;
+    const fullRef = `${repo}:${tag}`;
+    navigator.clipboard.writeText(fullRef);
+    setImageCopied(true);
+    setTimeout(() => setImageCopied(false), 2000);
+  };
 
   const handleDeploy = () => {
     setIsDeploying(true);
@@ -302,6 +413,154 @@ spec:
                     </span>
                   </div>
                 )}
+              </div>
+
+              {/* GitHub Actions CI Section */}
+              <div className="p-3.5 rounded border border-zinc-800 bg-[#121215] space-y-3" id="app-detail-ci-section">
+                <div className="flex items-center justify-between text-xs">
+                  <div className="flex items-center gap-2 font-mono font-semibold text-zinc-300">
+                    <Play className="w-4 h-4 text-purple-400" />
+                    <span>CI Automation</span>
+                    <span className="px-1.5 py-0.5 rounded text-[10px] bg-zinc-800 text-zinc-300 font-normal">
+                      GitHub Actions
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {getCIBadge(ciData?.status || app.ci_status)}
+                    <button
+                      id="refresh-ci-btn"
+                      onClick={handleRefreshCI}
+                      disabled={refreshingCI}
+                      className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-zinc-800 hover:bg-zinc-700 text-zinc-300 hover:text-white transition disabled:opacity-50 text-[11px] font-mono border border-zinc-700"
+                      title="Refresh CI Status"
+                    >
+                      <RefreshCw className={`w-3 h-3 ${refreshingCI ? 'animate-spin text-emerald-400' : ''}`} />
+                      <span>Refresh</span>
+                    </button>
+                  </div>
+                </div>
+
+                <div className="p-2.5 rounded bg-zinc-950 border border-zinc-800 text-xs font-mono space-y-2">
+                  <div className="flex items-center justify-between text-[11px] text-zinc-400">
+                    <div className="flex items-center gap-1.5">
+                      <span>Workflow:</span>
+                      <span className="text-zinc-200 font-semibold">{ciData?.workflow || app.ci_workflow || 'CI'}</span>
+                    </div>
+                    <div>
+                      <span>Last Run: </span>
+                      <span className="text-zinc-300 font-semibold">
+                        {ciData?.last_run_at || app.ci_last_run_at
+                          ? new Date(ciData?.last_run_at || app.ci_last_run_at || '').toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+                          : 'Pending Execution'}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-between pt-1 border-t border-zinc-900">
+                    <span className="text-[11px] text-zinc-500">
+                      {ciData?.run_id ? `Run #${ciData.run_id}` : '.github/workflows/ci.yml'}
+                    </span>
+                    <a
+                      id="view-github-actions-link"
+                      href={ciData?.run_url || (app.repository_url ? `${app.repository_url}/actions` : '#')}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="inline-flex items-center gap-1.5 px-3 py-1 rounded bg-purple-600/20 text-purple-300 border border-purple-500/40 hover:bg-purple-600/30 transition text-xs font-semibold font-mono"
+                    >
+                      <span>View GitHub Actions</span>
+                      <ExternalLink className="w-3 h-3" />
+                    </a>
+                  </div>
+                </div>
+              </div>
+
+              {/* Container Image (GHCR) Section */}
+              <div className="p-3.5 rounded border border-zinc-800 bg-[#121215] space-y-3" id="app-detail-container-image-section">
+                <div className="flex items-center justify-between text-xs">
+                  <div className="flex items-center gap-2 font-mono font-semibold text-zinc-300">
+                    <Package className="w-4 h-4 text-emerald-400" />
+                    <span>Container Image</span>
+                    <span className="px-1.5 py-0.5 rounded text-[10px] bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-mono">
+                      GHCR
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {getImageStatusBadge(imageData?.status || app.image_status)}
+                    <button
+                      id="refresh-image-btn"
+                      onClick={handleRefreshImage}
+                      disabled={refreshingImage}
+                      className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-zinc-800 hover:bg-zinc-700 text-zinc-300 hover:text-white transition disabled:opacity-50 text-[11px] font-mono border border-zinc-700"
+                      title="Sync GHCR Container Image"
+                    >
+                      <RefreshCw className={`w-3 h-3 ${refreshingImage ? 'animate-spin text-emerald-400' : ''}`} />
+                      <span>Sync</span>
+                    </button>
+                  </div>
+                </div>
+
+                <div className="p-2.5 rounded bg-zinc-950 border border-zinc-800 text-xs font-mono space-y-2.5">
+                  <div className="grid grid-cols-2 gap-2 text-[11px]">
+                    <div>
+                      <span className="text-zinc-500 block text-[10px] uppercase font-semibold">Registry</span>
+                      <span className="text-zinc-300 font-mono">
+                        {imageData?.registry || 'ghcr.io'}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-zinc-500 block text-[10px] uppercase font-semibold">Status</span>
+                      <span className="text-zinc-300 font-mono">
+                        {imageData?.status || app.image_status || 'PENDING'}
+                      </span>
+                    </div>
+                    <div className="col-span-2">
+                      <span className="text-zinc-500 block text-[10px] uppercase font-semibold">Image</span>
+                      <span id="container-image-repo" className="text-emerald-400 font-semibold font-mono break-all">
+                        {imageData?.repository || imageData?.image_repository || app.image_repository || (app.repository_owner && app.name ? `ghcr.io/${app.repository_owner.toLowerCase()}/${app.name.toLowerCase()}` : 'ghcr.io/devforge/app')}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-zinc-500 block text-[10px] uppercase font-semibold">Tag</span>
+                      <span id="container-image-tag" className="text-zinc-200 font-mono bg-zinc-900 px-1.5 py-0.5 rounded border border-zinc-800 inline-block">
+                        {imageData?.tag || imageData?.image_tag || app.image_tag || 'latest'}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-zinc-500 block text-[10px] uppercase font-semibold">Digest</span>
+                      <span id="container-image-digest" className="text-zinc-400 font-mono text-[10px] truncate block" title={imageData?.digest || imageData?.image_digest || app.image_digest || 'No digest available'}>
+                        {imageData?.digest || imageData?.image_digest || app.image_digest ? (
+                          (imageData?.digest || imageData?.image_digest || app.image_digest || '').slice(0, 19) + '...'
+                        ) : (
+                          'sha256:pending...'
+                        )}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Copy Image Reference Bar */}
+                  <div className="pt-2 border-t border-zinc-900 flex items-center justify-between gap-2">
+                    <div className="flex-1 min-w-0 bg-zinc-900/90 px-2.5 py-1.5 rounded border border-zinc-800 text-[11px] text-zinc-300 font-mono truncate" id="container-image-reference">
+                      {`${imageData?.repository || imageData?.image_repository || app.image_repository || (app.repository_owner && app.name ? `ghcr.io/${app.repository_owner.toLowerCase()}/${app.name.toLowerCase()}` : 'ghcr.io/devforge/app')}:${imageData?.tag || imageData?.image_tag || app.image_tag || 'latest'}`}
+                    </div>
+                    <button
+                      id="copy-image-ref-btn"
+                      onClick={handleCopyImageRef}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded bg-emerald-600/20 text-emerald-300 border border-emerald-500/40 hover:bg-emerald-600/30 transition text-xs font-semibold font-mono shrink-0 cursor-pointer"
+                    >
+                      {imageCopied ? (
+                        <>
+                          <Check className="w-3.5 h-3.5 text-emerald-400" />
+                          <span>Copied!</span>
+                        </>
+                      ) : (
+                        <>
+                          <Copy className="w-3.5 h-3.5" />
+                          <span>Copy Image</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </div>
               </div>
             </div>
           )}

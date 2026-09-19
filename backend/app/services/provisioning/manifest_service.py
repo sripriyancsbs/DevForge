@@ -23,6 +23,10 @@ class HealthCheckSpec(BaseModel):
     path: str = Field(default="/healthz")
     port: int = Field(default=8000, ge=1, le=65535)
 
+class CISpec(BaseModel):
+    provider: str = Field(default="github-actions")
+    workflow: str = Field(default="ci.yml")
+
 class ManifestSpec(BaseModel):
     runtime: str
     template: str
@@ -32,6 +36,7 @@ class ManifestSpec(BaseModel):
     build: BuildSpec = Field(default_factory=BuildSpec)
     deployment: DeploymentSpec = Field(default_factory=DeploymentSpec)
     healthCheck: HealthCheckSpec = Field(default_factory=HealthCheckSpec)
+    ci: CISpec = Field(default_factory=CISpec)
 
 class DevForgeManifest(BaseModel):
     apiVersion: str = Field(default="devforge/v1")

@@ -39,6 +39,15 @@ class ApplicationBase(BaseModel):
     provisioning_error: Optional[str] = None
     generated_path: Optional[str] = None
     manifest_yaml: Optional[str] = None
+    ci_status: str = Field(default="UNKNOWN", max_length=30)
+    ci_workflow: Optional[str] = Field(default="CI", max_length=100)
+    ci_run_id: Optional[str] = None
+    ci_run_url: Optional[str] = None
+    ci_last_run_at: Optional[datetime] = None
+    image_repository: Optional[str] = None
+    image_tag: Optional[str] = None
+    image_digest: Optional[str] = None
+    image_status: Optional[str] = "PENDING"
 
     @field_validator("name")
     @classmethod

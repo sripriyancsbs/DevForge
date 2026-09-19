@@ -15,8 +15,48 @@ import { SettingsPage } from './pages/SettingsPage';
 import { api } from './services/api';
 import { Application, Deployment, Environment, OverviewData } from './types';
 
+const getTabFromPath = (path: string): NavigationTab => {
+  const clean = path.replace(/^\/+|\/+$/g, '').toLowerCase();
+  const validTabs: NavigationTab[] = [
+    'overview',
+    'applications',
+    'create-application',
+    'environments',
+    'deployments',
+    'infrastructure',
+    'monitoring',
+    'activity',
+    'settings'
+  ];
+  if (clean === '' || clean === 'overview') return 'overview';
+  if (validTabs.includes(clean as NavigationTab)) return clean as NavigationTab;
+  return 'overview';
+};
+
 export const App: React.FC = () => {
-  const [currentTab, setCurrentTab] = useState<NavigationTab>('overview');
+  const [currentTab, setCurrentTabState] = useState<NavigationTab>(() => 
+    typeof window !== 'undefined' ? getTabFromPath(window.location.pathname) : 'overview'
+  );
+
+  const setCurrentTab = useCallback((tab: NavigationTab, updateHistory = true) => {
+    setCurrentTabState(tab);
+    if (updateHistory && typeof window !== 'undefined') {
+      const targetPath = tab === 'overview' ? '/' : `/${tab}`;
+      if (window.location.pathname !== targetPath) {
+        window.history.pushState({ tab }, '', targetPath);
+      }
+    }
+  }, []);
+
+  useEffect(() => {
+    const handlePopState = () => {
+      const tab = getTabFromPath(window.location.pathname);
+      setCurrentTabState(tab);
+    };
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, []);
+
   const [isMobileNavOpen, setIsMobileNavOpen] = useState(false);
   const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
 
@@ -108,7 +148,7 @@ export const App: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-[#09090b] text-[#f4f4f5] flex">
+    <div className="min-h-screen bg-[#09090b] text-[#f4f4f5] flex overflow-x-hidden">
       {/* Sidebar Navigation */}
       <Sidebar
         currentTab={currentTab}
@@ -118,7 +158,7 @@ export const App: React.FC = () => {
       />
 
       {/* Main Content Area */}
-      <div className="flex-1 flex flex-col min-w-0">
+      <div className="flex-1 flex flex-col min-w-0 overflow-x-hidden">
         <TopNav
           onOpenCommandPalette={() => setIsCommandPaletteOpen(true)}
           onToggleSidebar={() => setIsMobileNavOpen(!isMobileNavOpen)}
@@ -136,7 +176,7 @@ export const App: React.FC = () => {
           </div>
         )}
 
-        <main className="flex-1 pb-16">
+        <main className="flex-1 pb-16 overflow-x-hidden">
           {currentTab === 'overview' && (
             <OverviewPage
               data={overviewData}

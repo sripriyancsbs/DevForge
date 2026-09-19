@@ -210,6 +210,13 @@ class ProjectGenerator:
         manifest_content = manifest_file.read_text(encoding="utf-8")
         manifest_service.validate_manifest(manifest_content)
 
+        # Phase 4: Validate CI workflow exists and is non-empty
+        ci_file = target_dir / ".github" / "workflows" / "ci.yml"
+        if not ci_file.exists():
+            raise FileNotFoundError("Generated project missing required CI workflow: .github/workflows/ci.yml")
+        if not ci_file.read_text(encoding="utf-8").strip():
+            raise ValueError("Generated CI workflow .github/workflows/ci.yml is empty.")
+
         return True
 
 

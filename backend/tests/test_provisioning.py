@@ -67,6 +67,7 @@ def test_create_python_application(client):
     assert (target_dir / "requirements.txt").exists()
     assert (target_dir / "Dockerfile").exists()
     assert (target_dir / "devforge.yaml").exists()
+    assert (target_dir / ".github" / "workflows" / "ci.yml").exists()
 
 
 # 2. Valid React Application Creation
@@ -97,6 +98,7 @@ def test_create_react_application(client):
     assert (target_dir / "vite.config.ts").exists()
     assert (target_dir / "Dockerfile").exists()
     assert (target_dir / "devforge.yaml").exists()
+    assert (target_dir / ".github" / "workflows" / "ci.yml").exists()
 
 
 # 3. Valid Go Application Creation
@@ -125,6 +127,7 @@ def test_create_go_application(client):
     assert (target_dir / "go.mod").exists()
     assert (target_dir / "Dockerfile").exists()
     assert (target_dir / "devforge.yaml").exists()
+    assert (target_dir / ".github" / "workflows" / "ci.yml").exists()
 
 
 # 4. Valid Node.js Application Creation
@@ -153,6 +156,7 @@ def test_create_node_application(client):
     assert (target_dir / "package.json").exists()
     assert (target_dir / "Dockerfile").exists()
     assert (target_dir / "devforge.yaml").exists()
+    assert (target_dir / ".github" / "workflows" / "ci.yml").exists()
 
 
 # 5. Invalid Runtime Rejection
