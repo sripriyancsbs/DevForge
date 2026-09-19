@@ -1,0 +1,18 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: devforge-inventory-api-svc
+  labels:
+    app.kubernetes.io/name: inventory-api
+    app.kubernetes.io/instance: inventory-api
+    app.kubernetes.io/part-of: devforge
+    app.kubernetes.io/managed-by: argocd
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: inventory-api
+  ports:
+  - name: http
+    port: 8000
+    targetPort: 8000
+    protocol: TCP
