@@ -27,3 +27,23 @@ def mock_repository_service_for_offline_tests(request):
             "remote_url": f"{repo_html_url}.git"
         }
         yield mock_repo_svc
+
+
+@pytest.fixture(autouse=True)
+def clean_pending_jobs():
+    """
+    Ensure worker FIFO queue isolation between tests.
+    Any stale unhandled PENDING or RETRY jobs left by earlier tests are marked READY
+    so they do not contaminate worker queue acquisition in subsequent tests.
+    """
+    from app.db.session import SessionLocal
+    from app.models.provisioning_job import ProvisioningJob
+    db = SessionLocal()
+    try:
+        db.query(ProvisioningJob).filter(ProvisioningJob.status.in_(["PENDING", "RETRY"])).update({"status": "READY"})
+        db.commit()
+    except Exception:
+        db.rollback()
+    finally:
+        db.close()
+    yield

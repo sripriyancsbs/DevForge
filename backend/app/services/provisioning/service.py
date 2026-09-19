@@ -68,16 +68,21 @@ class ProvisioningService:
         db.refresh(job)
         return job
 
-    def acquire_next_job(self, db: Session) -> Optional[ProvisioningJob]:
+    def acquire_next_job(self, db: Session, job_id: Optional[int] = None) -> Optional[ProvisioningJob]:
         """
         Acquire the next PENDING or RETRY job using PostgreSQL row-level locking.
         Uses FOR UPDATE SKIP LOCKED to prevent concurrent workers from claiming the same job.
+        If job_id is specified, acquires that specific job using row-level locking.
         """
         try:
             stmt = (
                 select(ProvisioningJob)
                 .where(ProvisioningJob.status.in_(["PENDING", "RETRY"]))
-                .order_by(ProvisioningJob.created_at.asc())
+            )
+            if job_id is not None:
+                stmt = stmt.where(ProvisioningJob.id == job_id)
+            stmt = (
+                stmt.order_by(ProvisioningJob.created_at.asc())
                 .with_for_update(skip_locked=True)
                 .limit(1)
             )

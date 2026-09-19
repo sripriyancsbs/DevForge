@@ -161,17 +161,15 @@ def test_worker_row_locking_and_execution(client):
     # 1. Acquire job with row lock
     db = SessionLocal()
     try:
-        acquired_job = provisioning_service.acquire_next_job(db)
+        acquired_job = provisioning_service.acquire_next_job(db, job_id=job_id)
         assert acquired_job is not None
         assert acquired_job.id == job_id
         assert acquired_job.status == "PROVISIONING"
         assert acquired_job.started_at is not None
 
         # Try to acquire again concurrently - should return None because job is already claimed
-        second_acquire = provisioning_service.acquire_next_job(db)
-        # Should either be None or another unacquired job, but not this job
-        if second_acquire:
-            assert second_acquire.id != job_id
+        second_acquire = provisioning_service.acquire_next_job(db, job_id=job_id)
+        assert second_acquire is None
     finally:
         db.close()
 
@@ -424,7 +422,7 @@ def test_phase3_provisioning_state_machine_steps(client):
     db = SessionLocal()
     try:
         # Step through execution
-        job = provisioning_service.acquire_next_job(db)
+        job = provisioning_service.acquire_next_job(db, job_id=job_id)
         assert job.id == job_id
 
         finished_job = provisioning_service.execute_job(job.id, db)
