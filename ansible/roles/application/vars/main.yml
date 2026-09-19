@@ -1,0 +1,5 @@
+---
+# Internal variables for application role
+app_config_filename: ".env"
+app_directory_mode: "0755"
+app_file_mode: "0644"

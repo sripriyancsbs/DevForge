@@ -2,26 +2,17 @@ import React from 'react';
 import {
   LayoutDashboard,
   Box,
-  Server,
-  GitCommit,
-  Cpu,
-  Activity as ActivityIcon,
   Clock,
   Settings as SettingsIcon,
   X,
-  Code2,
-  ExternalLink,
-  ShieldCheck
+  Code2
 } from 'lucide-react';
 
 export type NavigationTab = 
   | 'overview' 
   | 'applications' 
   | 'create-application'
-  | 'environments' 
-  | 'deployments' 
-  | 'infrastructure' 
-  | 'monitoring' 
+  | 'application-detail'
   | 'activity' 
   | 'settings';
 
@@ -30,21 +21,19 @@ interface SidebarProps {
   onSelectTab: (tab: NavigationTab) => void;
   isOpenMobile: boolean;
   onCloseMobile: () => void;
+  applicationsCount?: number;
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
   currentTab,
   onSelectTab,
   isOpenMobile,
-  onCloseMobile
+  onCloseMobile,
+  applicationsCount = 0
 }) => {
   const navItems = [
     { id: 'overview' as NavigationTab, label: 'Overview', icon: LayoutDashboard },
     { id: 'applications' as NavigationTab, label: 'Applications', icon: Box },
-    { id: 'environments' as NavigationTab, label: 'Environments', icon: Server },
-    { id: 'deployments' as NavigationTab, label: 'Deployments', icon: GitCommit },
-    { id: 'infrastructure' as NavigationTab, label: 'Infrastructure', icon: Cpu },
-    { id: 'monitoring' as NavigationTab, label: 'Monitoring', icon: ActivityIcon },
     { id: 'activity' as NavigationTab, label: 'Activity', icon: Clock },
     { id: 'settings' as NavigationTab, label: 'Settings', icon: SettingsIcon },
   ];
@@ -61,22 +50,19 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
       {/* Sidebar Container */}
       <aside
-        className={`fixed md:sticky top-0 left-0 h-screen w-60 bg-[#0c0c0e] border-r border-[#27272a] flex flex-col z-50 transition-transform duration-200 ease-in-out ${
+        className={`fixed md:sticky top-0 left-0 h-screen w-60 shrink-0 bg-[#0c0c0e] border-r border-[#27272a] flex flex-col z-50 transition-transform duration-200 ease-in-out ${
           isOpenMobile ? 'translate-x-0' : '-translate-x-full md:translate-x-0'
         }`}
       >
-        {/* Brand Header */}
+        {/* Brand Header - Clean, No Platform Version Badge */}
         <div className="h-14 border-b border-[#27272a] px-4 flex items-center justify-between">
           <div className="flex items-center gap-2.5">
             <div className="w-7 h-7 rounded bg-zinc-900 border border-zinc-700 flex items-center justify-center text-emerald-500 font-mono font-bold text-sm">
               <Code2 className="w-4 h-4" />
             </div>
             <div className="flex flex-col">
-              <span className="font-semibold text-sm tracking-tight text-white flex items-center gap-1.5">
+              <span className="font-semibold text-sm tracking-tight text-white">
                 DevForge
-                <span className="text-[10px] font-mono text-emerald-400 bg-emerald-950/60 border border-emerald-800/60 px-1 py-0.2 rounded">
-                  v0.1
-                </span>
               </span>
               <span className="text-[10px] text-zinc-500 font-mono tracking-wider">INTERNAL PLATFORM</span>
             </div>
@@ -92,11 +78,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
         {/* Navigation Items */}
         <div className="flex-1 py-4 px-2 space-y-0.5 overflow-y-auto">
           <div className="px-2.5 pb-2 text-[10px] font-semibold text-zinc-500 uppercase tracking-wider font-mono">
-            Platform Workflows
+            Navigation
           </div>
           {navItems.map((item) => {
             const Icon = item.icon;
-            const isActive = currentTab === item.id || (item.id === 'applications' && currentTab === 'create-application');
+            const isActive =
+              currentTab === item.id ||
+              (item.id === 'applications' && (currentTab === 'create-application' || currentTab === 'application-detail'));
             return (
               <button
                 key={item.id}
@@ -112,9 +100,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
               >
                 <Icon className={`w-4 h-4 ${isActive ? 'text-emerald-400' : 'text-zinc-500'}`} />
                 <span>{item.label}</span>
-                {item.id === 'applications' && (
-                  <span className="ml-auto text-[10px] font-mono text-zinc-500 bg-zinc-800 px-1.5 py-0.5 rounded">
-                    8
+                {item.id === 'applications' && applicationsCount > 0 && (
+                  <span className="ml-auto text-[10px] font-mono text-zinc-400 bg-zinc-800 px-1.5 py-0.5 rounded border border-zinc-700/50">
+                    {applicationsCount}
                   </span>
                 )}
               </button>
@@ -122,7 +110,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           })}
         </div>
 
-        {/* Footer info: Cluster & API health */}
+        {/* Footer info: Truthful Cluster & Database telemetry */}
         <div className="p-3 border-t border-[#27272a] bg-[#0e0e11]">
           <div className="rounded border border-zinc-800/80 bg-zinc-900/50 p-2 text-xs">
             <div className="flex items-center justify-between text-[11px] font-mono text-zinc-400 mb-1">
@@ -130,11 +118,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
                 Cluster Healthy
               </span>
-              <span className="text-[10px] text-zinc-500">us-east-1</span>
+              <span className="text-[10px] text-zinc-500">Local KinD</span>
             </div>
             <div className="text-[10px] text-zinc-500 font-mono flex items-center justify-between">
-              <span>FastAPI v0.110</span>
-              <span className="text-zinc-400">PostgreSQL 16</span>
+              <span>Kubernetes IDP</span>
+              <span className="text-zinc-400">PostgreSQL</span>
             </div>
           </div>
         </div>

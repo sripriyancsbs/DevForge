@@ -47,3 +47,21 @@ def clean_pending_jobs():
     finally:
         db.close()
     yield
+
+
+@pytest.fixture
+def db():
+    from app.db.session import SessionLocal
+    session = SessionLocal()
+    try:
+        yield session
+    finally:
+        session.close()
+
+
+@pytest.fixture
+def client():
+    from fastapi.testclient import TestClient
+    from app.main import app
+    with TestClient(app) as c:
+        yield c

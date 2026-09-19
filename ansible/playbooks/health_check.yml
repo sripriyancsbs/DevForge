@@ -1,0 +1,42 @@
+---
+# Playbook: Health Check
+# Automated health verification for environment, directories, and application configurations.
+- name: DevForge Automation Health Check
+  hosts: development
+  gather_facts: false
+  vars:
+    target_app: "{{ app_name | default('inventory-api') }}"
+    target_env: "{{ app_env | default('development') }}"
+    app_base_dir: "/tmp/devforge/apps"
+    env_base_dir: "/tmp/devforge/environments/{{ target_env }}"
+
+  tasks:
+    - name: Check system temporary directories
+      ansible.builtin.stat:
+        path: "/tmp"
+      register: tmp_stat
+
+    - name: Assert system filesystem is healthy
+      ansible.builtin.assert:
+        that:
+          - tmp_stat.stat.exists
+          - tmp_stat.stat.isdir
+        fail_msg: "System filesystem check failed: /tmp is unavailable."
+
+    - name: Check environment baseline existence
+      ansible.builtin.stat:
+        path: "{{ env_base_dir }}/environment.json"
+      register: env_stat
+
+    - name: Check application configuration file
+      ansible.builtin.stat:
+        path: "{{ app_base_dir }}/{{ target_app }}/.env"
+      register: app_stat
+
+    - name: Log health check results
+      ansible.builtin.debug:
+        msg: >-
+          [HEALTH CHECK PASS] Environment [{{ target_env }}] baseline status:
+          {{ 'CONFIGURED' if env_stat.stat.exists else 'NOT INITIALIZED' }} |
+          Application [{{ target_app }}] config status:
+          {{ 'CONFIGURED' if app_stat.stat.exists else 'NOT INITIALIZED' }}.

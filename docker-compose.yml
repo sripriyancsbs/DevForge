@@ -45,6 +45,13 @@ services:
     ports:
       - "8000:8000"
     volumes:
+      - ./backend/app:/app/app
+      - ./backend/tests:/app/tests
+      - ./templates:/app/templates
+      - ./ansible:/app/ansible
+      - ./terraform:/app/terraform
+      - ./gitops:/app/gitops
+      - ./.devforge/kubeconfig:/root/.kube/config:ro
       - generated_workspace:/app/.devforge/generated
     networks:
       - devforge-network
@@ -67,9 +74,18 @@ services:
       DEVFORGE_TEMPLATES_DIR: "/app/templates"
       DEVFORGE_WORKSPACE_DIR: "/app/.devforge/generated"
       WORKER_POLL_INTERVAL: "1.0"
+      WORKER_METRICS_PORT: "8001"
       GITHUB_TOKEN: ${GITHUB_TOKEN:-}
       GITHUB_OWNER: ${GITHUB_OWNER:-sripriyancsbs}
+    ports:
+      - "8001:8001"
     volumes:
+      - ./backend/app:/app/app
+      - ./templates:/app/templates
+      - ./ansible:/app/ansible
+      - ./terraform:/app/terraform
+      - ./gitops:/app/gitops
+      - ./.devforge/kubeconfig:/root/.kube/config:ro
       - generated_workspace:/app/.devforge/generated
     networks:
       - devforge-network
@@ -88,12 +104,73 @@ services:
     networks:
       - devforge-network
 
+  postgres-exporter:
+    image: prometheuscommunity/postgres-exporter:v0.15.0
+    container_name: devforge-postgres-exporter
+    restart: unless-stopped
+    environment:
+      DATA_SOURCE_NAME: "postgresql://${POSTGRES_USER:-devforge}:${POSTGRES_PASSWORD:-devforge_secure_password}@postgres:5432/${POSTGRES_DB:-devforge_db}?sslmode=disable"
+    ports:
+      - "9187:9187"
+    networks:
+      - devforge-network
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  prometheus:
+    image: prom/prometheus:v2.51.0
+    container_name: devforge-prometheus
+    restart: unless-stopped
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+      - "--web.enable-lifecycle"
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./monitoring/prometheus/alerts.yml:/etc/prometheus/alerts.yml:ro
+      - prometheus_data:/prometheus
+    networks:
+      - devforge-network
+    depends_on:
+      - backend
+      - worker
+
+  grafana:
+    image: grafana/grafana:10.4.1
+    container_name: devforge-grafana
+    restart: unless-stopped
+    ports:
+      - "3001:3000"
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_USERS_ALLOW_SIGN_UP=false
+      - GF_AUTH_ANONYMOUS_ENABLED=true
+      - GF_AUTH_ANONYMOUS_ORG_ROLE=Viewer
+    volumes:
+      - ./monitoring/grafana/provisioning/datasources:/etc/grafana/provisioning/datasources:ro
+      - ./monitoring/grafana/provisioning/dashboards:/etc/grafana/provisioning/dashboards:ro
+      - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana_data:/var/lib/grafana
+    networks:
+      - devforge-network
+    depends_on:
+      - prometheus
+
 volumes:
   postgres_data:
     driver: local
   generated_workspace:
     driver: local
+  prometheus_data:
+    driver: local
+  grafana_data:
+    driver: local
 
 networks:
   devforge-network:
     driver: bridge
+

@@ -1,0 +1,33 @@
+---
+# Tasks for DevForge Application Role
+- name: Ensure application root directory exists
+  ansible.builtin.file:
+    path: "{{ app_base_dir }}/{{ app_name }}"
+    state: directory
+    mode: "{{ app_directory_mode }}"
+
+- name: Ensure application logs directory exists
+  ansible.builtin.file:
+    path: "{{ app_base_dir }}/{{ app_name }}/logs"
+    state: directory
+    mode: "{{ app_directory_mode }}"
+
+- name: Deploy application environment configuration
+  ansible.builtin.template:
+    src: "app_config.env.j2"
+    dest: "{{ app_base_dir }}/{{ app_name }}/{{ app_config_filename }}"
+    mode: "{{ app_file_mode }}"
+  notify: restart application service
+
+- name: Verify application configuration file exists
+  ansible.builtin.stat:
+    path: "{{ app_base_dir }}/{{ app_name }}/{{ app_config_filename }}"
+  register: app_cfg_stat
+
+- name: Assert configuration file deployed successfully
+  ansible.builtin.assert:
+    that:
+      - app_cfg_stat.stat.exists
+      - app_cfg_stat.stat.size > 0
+    fail_msg: "Application configuration deployment verification failed for {{ app_name }}."
+    success_msg: "Application {{ app_name }} configured successfully at {{ app_base_dir }}/{{ app_name }}."

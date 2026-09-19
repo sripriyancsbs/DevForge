@@ -1,0 +1,24 @@
+---
+# Playbook: Configure Application
+# Configures application runtime directories, settings, and environment files.
+- name: Configure DevForge Application
+  hosts: development
+  gather_facts: false
+  vars:
+    target_app: "{{ app_name | default('inventory-api') }}"
+    target_env: "{{ app_env | default('development') }}"
+    target_port: "{{ app_port | default(8000) }}"
+
+  roles:
+    - role: application
+      vars:
+        app_name: "{{ target_app }}"
+        app_env: "{{ target_env }}"
+        app_port: "{{ target_port }}"
+
+  post_tasks:
+    - name: Execution Summary
+      ansible.builtin.debug:
+        msg: >-
+          DevForge Application [{{ target_app }}] configuration complete for
+          environment [{{ target_env }}] on port [{{ target_port }}].

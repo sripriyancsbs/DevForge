@@ -368,10 +368,26 @@ def test_retry_provisioning_job_api(client):
     assert retried_data["attempt"] == 2
     assert retried_data["error_message"] is None
 
-    # Now the worker can execute it successfully
+    # Now the worker (or local execution) can execute it successfully
     db = SessionLocal()
     try:
-        finished = provisioning_service.execute_job(job_id, db)
+        finished = None
+        for _ in range(20):
+            db.expire_all()
+            job_record = db.query(ProvisioningJob).filter(ProvisioningJob.id == job_id).first()
+            if job_record and job_record.status == "READY":
+                finished = job_record
+                break
+            elif job_record and job_record.status == "PENDING":
+                finished = provisioning_service.execute_job(job_id, db)
+                break
+            time.sleep(0.3)
+
+        if not finished:
+            db.expire_all()
+            finished = db.query(ProvisioningJob).filter(ProvisioningJob.id == job_id).first()
+
+        assert finished is not None
         assert finished.status == "READY"
         assert finished.current_step == "COMPLETED"
     finally:

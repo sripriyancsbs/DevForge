@@ -1,0 +1,49 @@
+---
+# Playbook: Configure Environment
+# Establishes idempotent environment baselines, directories, and configuration markers.
+- name: Configure DevForge Environment Baseline
+  hosts: development
+  gather_facts: false
+  vars:
+    target_env: "{{ app_env | default('development') }}"
+    base_env_dir: "/tmp/devforge/environments/{{ target_env }}"
+    config_dir: "/tmp/devforge/config"
+
+  tasks:
+    - name: Ensure base environment directory exists
+      ansible.builtin.file:
+        path: "{{ base_env_dir }}"
+        state: directory
+        mode: "0755"
+
+    - name: Ensure global configuration directory exists
+      ansible.builtin.file:
+        path: "{{ config_dir }}"
+        state: directory
+        mode: "0755"
+
+    - name: Deploy environment baseline descriptor
+      ansible.builtin.copy:
+        dest: "{{ base_env_dir }}/environment.json"
+        content: |
+          {
+            "environment": "{{ target_env }}",
+            "managed_by": "ansible",
+            "orchestrator": "DevForge IDP",
+            "topology": "single-node-development",
+            "status": "active"
+          }
+        mode: "0644"
+
+    - name: Verify environment descriptor file
+      ansible.builtin.stat:
+        path: "{{ base_env_dir }}/environment.json"
+      register: env_desc_stat
+
+    - name: Validate environment baseline
+      ansible.builtin.assert:
+        that:
+          - env_desc_stat.stat.exists
+          - env_desc_stat.stat.size > 0
+        fail_msg: "Environment descriptor missing or corrupted in {{ base_env_dir }}."
+        success_msg: "Environment [{{ target_env }}] baseline verified successfully."

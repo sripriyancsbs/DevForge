@@ -6,6 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.exceptions import RequestValidationError
 from app.core.config import settings
 from app.db.session import engine, Base, SessionLocal, verify_connection, run_phase2_migrations
+import app.models  # Ensures all SQLAlchemy models are registered
 from app.db.seed import seed_database
 from app.api.api_v1 import (
     overview,
@@ -17,6 +18,10 @@ from app.api.api_v1 import (
     monitoring,
     provisioning,
     integrations,
+    kubernetes_deployments,
+    ansible,
+    gitops,
+    remediation,
 )
 
 logging.basicConfig(level=logging.INFO)
@@ -69,6 +74,14 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
         content={"detail": "Validation error", "errors": errors}
     )
 
+from starlette.responses import Response
+from app.core.metrics import (
+    PrometheusMiddleware,
+    generate_latest,
+    CONTENT_TYPE_LATEST,
+    record_postgres_health,
+)
+
 # Set CORS
 app.add_middleware(
     CORSMiddleware,
@@ -77,6 +90,8 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+# Prometheus request instrumentation
+app.add_middleware(PrometheusMiddleware)
 
 # Health endpoint - actively checks PostgreSQL probe
 @app.get("/health")
@@ -84,7 +99,9 @@ def health():
     try:
         verify_connection()
         db_status = "connected"
+        record_postgres_health(True)
     except Exception as e:
+        record_postgres_health(False)
         return JSONResponse(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             content={
@@ -101,6 +118,16 @@ def health():
         "database": db_status
     }
 
+# Prometheus Metrics Scrape Endpoint
+@app.get("/metrics")
+def metrics():
+    try:
+        verify_connection()
+        record_postgres_health(True)
+    except Exception:
+        record_postgres_health(False)
+    return Response(content=generate_latest(), media_type=CONTENT_TYPE_LATEST)
+
 # Register API Routers
 app.include_router(overview.router, prefix=f"{settings.API_V1_STR}/overview", tags=["overview"])
 app.include_router(applications.router, prefix=f"{settings.API_V1_STR}/applications", tags=["applications"])
@@ -111,6 +138,11 @@ app.include_router(infrastructure.router, prefix=f"{settings.API_V1_STR}/infrast
 app.include_router(monitoring.router, prefix=f"{settings.API_V1_STR}/monitoring", tags=["monitoring"])
 app.include_router(provisioning.router, prefix=f"{settings.API_V1_STR}/provisioning", tags=["provisioning"])
 app.include_router(integrations.router, prefix=f"{settings.API_V1_STR}/integrations", tags=["integrations"])
+app.include_router(kubernetes_deployments.router, prefix=settings.API_V1_STR, tags=["kubernetes"])
+app.include_router(ansible.router, prefix=f"{settings.API_V1_STR}/ansible", tags=["ansible"])
+app.include_router(gitops.router, prefix=settings.API_V1_STR, tags=["gitops"])
+app.include_router(remediation.router, prefix=f"{settings.API_V1_STR}/remediation", tags=["remediation"])
+app.include_router(remediation.router, prefix=settings.API_V1_STR, tags=["remediation-alias"])
 
 if __name__ == "__main__":
     import uvicorn

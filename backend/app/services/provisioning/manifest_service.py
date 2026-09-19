@@ -15,9 +15,15 @@ class BuildSpec(BaseModel):
     docker: bool = Field(default=True)
     dockerfile: str = Field(default="Dockerfile")
 
+class ContainerSpec(BaseModel):
+    registry: str = Field(default="ghcr.io")
+    repository: Optional[str] = None
+
 class DeploymentSpec(BaseModel):
+    provider: str = Field(default="kubernetes")
     strategy: str = Field(default="rolling")
     replicas: int = Field(default=2, ge=1, le=50)
+    port: Optional[int] = Field(default=None)
 
 class HealthCheckSpec(BaseModel):
     path: str = Field(default="/healthz")
@@ -34,6 +40,7 @@ class ManifestSpec(BaseModel):
     port: int = Field(default=8000, ge=1, le=65535)
     database: DatabaseSpec = Field(default_factory=DatabaseSpec)
     build: BuildSpec = Field(default_factory=BuildSpec)
+    container: ContainerSpec = Field(default_factory=ContainerSpec)
     deployment: DeploymentSpec = Field(default_factory=DeploymentSpec)
     healthCheck: HealthCheckSpec = Field(default_factory=HealthCheckSpec)
     ci: CISpec = Field(default_factory=CISpec)
@@ -84,7 +91,8 @@ class ManifestService:
                 port=port,
                 database=DatabaseSpec(type=database_type),
                 build=BuildSpec(docker=True, dockerfile="Dockerfile"),
-                deployment=DeploymentSpec(strategy=deployment_strategy, replicas=replicas),
+                container=ContainerSpec(registry="ghcr.io", repository=f"sripriyancsbs/{name.lower()}"),
+                deployment=DeploymentSpec(provider="kubernetes", strategy=deployment_strategy, replicas=replicas, port=port),
                 healthCheck=HealthCheckSpec(path=health_path, port=port)
             )
         )

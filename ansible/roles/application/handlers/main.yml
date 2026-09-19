@@ -1,0 +1,4 @@
+---
+- name: restart application service
+  ansible.builtin.debug:
+    msg: "Application service [{{ app_name }}] notified for runtime reload in environment [{{ app_env }}]."

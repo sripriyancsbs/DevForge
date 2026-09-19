@@ -28,6 +28,10 @@ from app.services.provisioning.project_generator import project_generator
 from app.services.provisioning.service import provisioning_service
 from app.services.ci.workflow_service import workflow_service
 from app.services.image import image_service
+from app.schemas.remediation import ApplicationRemediationOverview, RemediationPolicyResponse
+from app.models.remediation import RemediationEvent, RemediationExecution
+from app.services.remediation import policy_service
+from sqlalchemy import desc
 
 logger = logging.getLogger("devforge.api.applications")
 router = APIRouter()
@@ -463,5 +467,72 @@ def sync_application_image_endpoint(app_id_or_slug: str, db: Session = Depends(g
         synced = image_service.record_initial_image(app, app.version, db)
 
     return ContainerImageResponse.from_orm_model(synced)
+
+
+@router.get("/{app_id_or_slug}/remediation", response_model=ApplicationRemediationOverview)
+def get_application_remediation_summary(app_id_or_slug: str, db: Session = Depends(get_db)):
+    """Fetch live self-healing and automated remediation state for an application."""
+    if app_id_or_slug.isdigit():
+        app = db.query(Application).filter(Application.id == int(app_id_or_slug)).first()
+    else:
+        app = db.query(Application).filter(Application.slug == app_id_or_slug.lower()).first()
+
+    if not app:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Application '{app_id_or_slug}' not found."
+        )
+
+    events = (
+        db.query(RemediationEvent)
+        .filter(RemediationEvent.application_id == app.id)
+        .order_by(desc(RemediationEvent.created_at))
+        .limit(20)
+        .all()
+    )
+
+    executions = (
+        db.query(RemediationExecution)
+        .filter(RemediationExecution.application_id == app.id)
+        .order_by(desc(RemediationExecution.created_at))
+        .all()
+    )
+
+    policies = policy_service.list_policies(db)
+
+    active_count = sum(1 for e in events if e.status in ["DETECTED", "EVALUATING", "REMEDIATING", "VERIFYING"])
+    successful_count = sum(1 for ex in executions if ex.status == "SUCCESS")
+    failed_count = sum(1 for ex in executions if ex.status in ["FAILED", "CANCELLED"])
+    last_exec = executions[0] if executions else None
+
+    return ApplicationRemediationOverview(
+        application_id=app.id,
+        application_name=app.name,
+        health_status=app.status or "healthy",
+        active_events_count=active_count,
+        total_remediations=len(executions),
+        successful_remediations=successful_count,
+        failed_remediations=failed_count,
+        last_remediation=last_exec,
+        events=events,
+        policies=policies,
+    )
+
+
+@router.get("/{app_id_or_slug}/remediation/policies", response_model=List[RemediationPolicyResponse])
+def get_application_remediation_policies_summary(app_id_or_slug: str, db: Session = Depends(get_db)):
+    """Fetch active remediation policies for an application."""
+    if app_id_or_slug.isdigit():
+        app = db.query(Application).filter(Application.id == int(app_id_or_slug)).first()
+    else:
+        app = db.query(Application).filter(Application.slug == app_id_or_slug.lower()).first()
+
+    if not app:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Application '{app_id_or_slug}' not found."
+        )
+    return policy_service.list_policies(db)
+
 
 

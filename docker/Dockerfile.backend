@@ -2,19 +2,28 @@ FROM python:3.12-slim
 
 WORKDIR /app
 
-# Install system build dependencies for psycopg2 if needed
 RUN apt-get update && apt-get install -y --no-install-recommends \
     gcc \
     libpq-dev \
     curl \
     git \
+    unzip \
     && rm -rf /var/lib/apt/lists/*
+
+# Install HashiCorp Terraform
+ARG TERRAFORM_VERSION=1.9.8
+RUN curl -fsSL https://releases.hashicorp.com/terraform/${TERRAFORM_VERSION}/terraform_${TERRAFORM_VERSION}_linux_amd64.zip -o /tmp/terraform.zip \
+    && unzip /tmp/terraform.zip -d /usr/local/bin \
+    && rm /tmp/terraform.zip \
+    && chmod +x /usr/local/bin/terraform
 
 COPY backend/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY backend/ /app/
 COPY templates/ /app/templates/
+COPY ansible/ /app/ansible/
+COPY terraform/ /app/terraform/
 RUN mkdir -p /app/.devforge/generated
 
 EXPOSE 8000

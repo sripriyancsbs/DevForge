@@ -11,7 +11,7 @@ export const SettingsPage: React.FC = () => {
   };
 
   return (
-    <div className="p-6 max-w-4xl mx-auto space-y-6">
+    <div className="p-4 sm:p-6 max-w-4xl mx-auto space-y-6 w-full min-w-0">
       {/* Header */}
       <div className="pb-2 border-b border-zinc-800/80">
         <h1 className="text-xl font-bold tracking-tight text-white flex items-center gap-2">

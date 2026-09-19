@@ -1,0 +1,10 @@
+# DevForge Development Environment — Example Terraform Variables
+
+environment       = "development"
+namespace         = "devforge"
+kubeconfig_path   = "~/.kube/config"
+application_name  = "inventory-api"
+image_repository  = "ghcr.io/sripriyancsbs/inventory-api"
+image_tag         = "latest"
+replicas          = 1
+container_port    = 8000

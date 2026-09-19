@@ -100,10 +100,14 @@ class ImageService:
         repo_name = self.get_image_repository(application.repository_owner, application.name)
 
         # Query recent workflow runs from GitHub Actions
-        runs = github_client.get_workflow_runs(
-            application.repository_name,
-            branch=application.repository_default_branch or "main"
-        )
+        try:
+            runs = github_client.get_workflow_runs(
+                application.repository_name,
+                branch=application.repository_default_branch or "main"
+            )
+        except Exception as e:
+            logger.warning(f"Failed to fetch workflow runs from GitHub: {e}")
+            return latest_img
 
         if not runs:
             return latest_img

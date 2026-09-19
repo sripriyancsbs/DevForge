@@ -1,0 +1,83 @@
+groups:
+  - name: devforge_platform_alerts
+    rules:
+      - alert: BackendUnavailable
+        expr: up{job="backend"} == 0
+        for: 15s
+        labels:
+          severity: critical
+          service: devforge-backend
+        annotations:
+          summary: "DevForge Backend API is down"
+          description: "Prometheus has been unable to scrape the DevForge backend API on port 8000 for more than 15 seconds."
+
+      - alert: WorkerUnavailable
+        expr: up{job="worker"} == 0
+        for: 15s
+        labels:
+          severity: critical
+          service: devforge-worker
+        annotations:
+          summary: "DevForge Background Worker is down"
+          description: "Prometheus has been unable to scrape the DevForge provisioning & automation worker on port 8001 for more than 15 seconds."
+
+      - alert: PostgreSQLUnavailable
+        expr: up{job="postgres"} == 0 or pg_up == 0
+        for: 15s
+        labels:
+          severity: critical
+          service: devforge-postgres
+        annotations:
+          summary: "PostgreSQL Database is unavailable"
+          description: "PostgreSQL exporter or backend probe reports database is unreachable or disconnected."
+
+      - alert: HighHttpErrorRate
+        expr: sum(rate(devforge_http_errors_total[1m])) / sum(rate(devforge_http_requests_total[1m])) > 0.05
+        for: 30s
+        labels:
+          severity: warning
+          service: devforge-backend
+        annotations:
+          summary: "High HTTP error rate detected (>5%)"
+          description: "More than 5% of requests to DevForge API resulted in 4xx or 5xx status codes over the last 1 minute."
+
+      - alert: HighApiLatency
+        expr: histogram_quantile(0.95, sum(rate(devforge_http_request_duration_seconds_bucket[1m])) by (le)) > 1.0
+        for: 30s
+        labels:
+          severity: warning
+          service: devforge-backend
+        annotations:
+          summary: "High API P95 latency (>1.0s)"
+          description: "P95 request duration on DevForge API exceeded 1000ms over the last 1 minute."
+
+      - alert: LargeProvisioningFailureRate
+        expr: sum(increase(devforge_provisioning_jobs_total{status="FAILED"}[10m])) > 2
+        for: 1m
+        labels:
+          severity: warning
+          service: devforge-worker
+        annotations:
+          summary: "Frequent application provisioning failures detected"
+          description: "More than 2 provisioning job failures occurred within a 10-minute window."
+
+      - alert: AnsibleExecutionFailures
+        expr: sum(increase(devforge_ansible_executions_total{status="FAILED"}[10m])) > 2
+        for: 1m
+        labels:
+          severity: warning
+          service: devforge-ansible
+        annotations:
+          summary: "Frequent Ansible automation execution failures"
+          description: "More than 2 Ansible playbook execution failures occurred within a 10-minute window."
+
+      - alert: ArgoCDSyncFailure
+        expr: sum(increase(devforge_gitops_operations_total{status="FAILED"}[10m])) > 2
+        for: 1m
+        labels:
+          severity: warning
+          service: devforge-argocd
+        annotations:
+          summary: "Argo CD synchronization failure detected"
+          description: "GitOps continuous delivery synchronization failed for one or more managed applications."
+

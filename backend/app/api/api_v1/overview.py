@@ -29,16 +29,16 @@ def get_overview(db: Session = Depends(get_db)):
         MetricCard(
             label="Applications",
             value=str(apps_count),
-            change="+2 this week",
+            change="Registered",
             status="healthy",
-            subtext="Registered services"
+            subtext="Platform applications"
         ),
         MetricCard(
             label="Healthy Services",
             value=healthy_str,
-            change="98.4% uptime",
+            change=f"{healthy_services_count} of {total_services}" if total_services > 0 else "None",
             status="healthy" if healthy_services_count == total_services and total_services > 0 else "warning",
-            subtext="Active healthchecks passing"
+            subtext="Passing health checks"
         ),
         MetricCard(
             label="Active Deployments",
@@ -52,7 +52,7 @@ def get_overview(db: Session = Depends(get_db)):
             value=str(failed_deployments),
             change="Requires attention" if failed_deployments > 0 else "All clean",
             status="failed" if failed_deployments > 0 else "healthy",
-            subtext="Last 24 hours"
+            subtext="Recent rollout errors"
         )
     ]
 

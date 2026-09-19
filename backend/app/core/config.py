@@ -36,6 +36,13 @@ class Settings(BaseSettings):
     GITHUB_TOKEN: str = os.getenv("GITHUB_TOKEN", "")
     GITHUB_OWNER: str = os.getenv("GITHUB_OWNER", "sripriyancsbs")
 
+    # Kubernetes Configuration
+    KUBERNETES_ENABLED: bool = os.getenv("KUBERNETES_ENABLED", "true").lower() in ("true", "1", "yes")
+    KUBERNETES_NAMESPACE: str = os.getenv("KUBERNETES_NAMESPACE", "devforge")
+    KUBERNETES_KUBECONFIG_PATH: str = os.getenv("KUBERNETES_KUBECONFIG_PATH", "")
+    KUBERNETES_CONTEXT: str = os.getenv("KUBERNETES_CONTEXT", "")
+    KUBERNETES_ROLLOUT_TIMEOUT: int = int(os.getenv("KUBERNETES_ROLLOUT_TIMEOUT", "120"))
+
     model_config = SettingsConfigDict(case_sensitive=True, extra="ignore")
 
 settings = Settings()

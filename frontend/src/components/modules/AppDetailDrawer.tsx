@@ -17,7 +17,7 @@ import {
   RefreshCw,
   Package
 } from 'lucide-react';
-import { Application, Deployment, ServiceHealth, CIStatusData, ContainerImageData } from '../../types';
+import { Application, Deployment, ServiceHealth, CIStatusData, ContainerImageData, KubernetesDeployment } from '../../types';
 import { StatusBadge } from '../common/StatusBadge';
 import { api } from '../../services/api';
 
@@ -48,6 +48,10 @@ export const AppDetailDrawer: React.FC<AppDetailDrawerProps> = ({
   const [imageData, setImageData] = useState<ContainerImageData | null>(null);
   const [refreshingImage, setRefreshingImage] = useState(false);
   const [imageCopied, setImageCopied] = useState(false);
+  const [k8sDeployment, setK8sDeployment] = useState<KubernetesDeployment | null>(null);
+  const [loadingK8s, setLoadingK8s] = useState(false);
+  const [deployingK8s, setDeployingK8s] = useState(false);
+  const [k8sError, setK8sError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!app) return;
@@ -127,6 +131,18 @@ spec:
         })
         .finally(() => setLoadingManifest(false));
     }
+
+    // Fetch Kubernetes Deployment metadata
+    setLoadingK8s(true);
+    api.getApplicationDeployment(app.id)
+      .then((dep) => {
+        setK8sDeployment(dep);
+        setK8sError(null);
+      })
+      .catch(() => {
+        setK8sDeployment(null);
+      })
+      .finally(() => setLoadingK8s(false));
   }, [app]);
 
   if (!app) return null;
@@ -208,6 +224,70 @@ spec:
     navigator.clipboard.writeText(manifestContent);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
+  };
+
+  const handleDeployK8s = async () => {
+    if (!app) return;
+    setDeployingK8s(true);
+    setK8sError(null);
+    try {
+      const dep = await api.deployApplication(app.id, {
+        image_tag: imageData?.tag || imageData?.image_tag || app.image_tag || undefined,
+        environment: 'development',
+        replicas: app.replicas || 1,
+        port: app.port || 8000
+      });
+      setK8sDeployment(dep);
+    } catch (err: any) {
+      setK8sError(err.message || 'Failed to deploy application');
+    } finally {
+      setDeployingK8s(false);
+    }
+  };
+
+  const handleRedeployK8s = async () => {
+    if (!app) return;
+    setDeployingK8s(true);
+    setK8sError(null);
+    try {
+      const dep = await api.redeployApplication(app.id);
+      setK8sDeployment(dep);
+    } catch (err: any) {
+      setK8sError(err.message || 'Failed to redeploy application');
+    } finally {
+      setDeployingK8s(false);
+    }
+  };
+
+  const handleStopK8s = async () => {
+    if (!app) return;
+    setDeployingK8s(true);
+    setK8sError(null);
+    try {
+      const dep = await api.stopApplicationDeployment(app.id);
+      setK8sDeployment(dep);
+    } catch (err: any) {
+      setK8sError(err.message || 'Failed to stop deployment');
+    } finally {
+      setDeployingK8s(false);
+    }
+  };
+
+  const getK8sStatusBadge = (status?: string) => {
+    const s = (status || 'PENDING').toUpperCase();
+    if (s === 'RUNNING') {
+      return <span id="k8s-deployment-status-badge" className="px-2 py-0.5 rounded text-[10px] font-mono bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 font-semibold">RUNNING</span>;
+    }
+    if (s === 'DEPLOYING' || s === 'PENDING') {
+      return <span id="k8s-deployment-status-badge" className="px-2 py-0.5 rounded text-[10px] font-mono bg-blue-500/15 text-blue-400 border border-blue-500/30 animate-pulse font-semibold">{s}</span>;
+    }
+    if (s === 'STOPPED') {
+      return <span id="k8s-deployment-status-badge" className="px-2 py-0.5 rounded text-[10px] font-mono bg-amber-500/15 text-amber-400 border border-amber-500/30 font-semibold">STOPPED</span>;
+    }
+    if (s === 'FAILED') {
+      return <span id="k8s-deployment-status-badge" className="px-2 py-0.5 rounded text-[10px] font-mono bg-red-500/15 text-red-400 border border-red-500/30 font-semibold">FAILED</span>;
+    }
+    return <span id="k8s-deployment-status-badge" className="px-2 py-0.5 rounded text-[10px] font-mono bg-zinc-800 text-zinc-400 border border-zinc-700">{s}</span>;
   };
 
   const appDeployments = deployments.filter((d) => d.application_id === app.id);
@@ -559,6 +639,165 @@ spec:
                         </>
                       )}
                     </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Kubernetes Deployment Section */}
+              <div className="p-3.5 rounded border border-zinc-800 bg-[#121215] space-y-3" id="app-detail-k8s-section">
+                <div className="flex items-center justify-between text-xs">
+                  <div className="flex items-center gap-2 font-mono font-semibold text-zinc-300">
+                    <Server className="w-4 h-4 text-blue-400" />
+                    <span>Kubernetes Deployment</span>
+                    <span className="px-1.5 py-0.5 rounded text-[10px] bg-blue-500/10 text-blue-400 border border-blue-500/20 font-mono">
+                      Local Kubernetes
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {k8sDeployment ? getK8sStatusBadge(k8sDeployment.status) : (
+                      <span id="k8s-deployment-status-badge" className="px-2 py-0.5 rounded text-[10px] font-mono bg-zinc-800 text-zinc-400 border border-zinc-700">NOT DEPLOYED</span>
+                    )}
+                    <button
+                      id="refresh-k8s-btn"
+                      onClick={() => {
+                        if (!app) return;
+                        setLoadingK8s(true);
+                        api.getApplicationDeployment(app.id)
+                          .then((dep) => setK8sDeployment(dep))
+                          .catch(() => {})
+                          .finally(() => setLoadingK8s(false));
+                      }}
+                      disabled={loadingK8s}
+                      className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-zinc-800 hover:bg-zinc-700 text-zinc-300 hover:text-white transition disabled:opacity-50 text-[11px] font-mono border border-zinc-700"
+                      title="Refresh Kubernetes Status"
+                    >
+                      <RefreshCw className={`w-3 h-3 ${loadingK8s ? 'animate-spin text-blue-400' : ''}`} />
+                      <span>Refresh</span>
+                    </button>
+                  </div>
+                </div>
+
+                {k8sError && (
+                  <div className="p-2.5 bg-red-950/40 border border-red-800 rounded text-xs text-red-300 font-mono flex items-center gap-2">
+                    <AlertCircle className="w-4 h-4 shrink-0 text-red-400" />
+                    <span>{k8sError}</span>
+                  </div>
+                )}
+
+                <div className="p-2.5 rounded bg-zinc-950 border border-zinc-800 text-xs font-mono space-y-2.5">
+                  <div className="grid grid-cols-2 gap-2 text-[11px]">
+                    <div>
+                      <span className="text-zinc-500 block text-[10px] uppercase font-semibold">Environment</span>
+                      <span id="k8s-deployment-env" className="text-zinc-300 font-mono">
+                        Local Kubernetes
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-zinc-500 block text-[10px] uppercase font-semibold">Namespace</span>
+                      <span id="k8s-deployment-ns" className="text-zinc-300 font-mono">
+                        {k8sDeployment?.namespace || 'devforge'}
+                      </span>
+                    </div>
+                    <div className="col-span-2">
+                      <span className="text-zinc-500 block text-[10px] uppercase font-semibold">Image</span>
+                      <span id="k8s-deployment-image" className="text-blue-400 font-semibold font-mono break-all">
+                        {k8sDeployment?.image || `${imageData?.repository || imageData?.image_repository || app.image_repository || `ghcr.io/${app.repository_owner || 'devforge'}/${app.name.toLowerCase()}`}:${imageData?.tag || imageData?.image_tag || app.image_tag || 'latest'}`}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-zinc-500 block text-[10px] uppercase font-semibold">Replicas</span>
+                      <span id="k8s-deployment-replicas" className="text-zinc-200 font-mono">
+                        {k8sDeployment ? `${k8sDeployment.replicas}` : `${app.replicas || 1}`}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-zinc-500 block text-[10px] uppercase font-semibold">Pods</span>
+                      <span id="k8s-deployment-pods" className={`font-mono font-semibold ${k8sDeployment?.ready_replicas === k8sDeployment?.replicas && k8sDeployment?.status === 'RUNNING' ? 'text-emerald-400' : 'text-zinc-300'}`}>
+                        {k8sDeployment ? `${k8sDeployment.ready_replicas} / ${k8sDeployment.replicas} Ready` : '0 / 0 Ready'}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-zinc-500 block text-[10px] uppercase font-semibold">Service</span>
+                      <span id="k8s-deployment-service" className="text-zinc-300 font-mono">
+                        {k8sDeployment?.service_name || `devforge-${app.slug}-svc`}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-zinc-500 block text-[10px] uppercase font-semibold">Port / NodePort</span>
+                      <span id="k8s-deployment-port" className="text-zinc-300 font-mono">
+                        {k8sDeployment ? `:${k8sDeployment.port}${k8sDeployment.node_port ? ` (NodePort: ${k8sDeployment.node_port})` : ''}` : `:${app.port}`}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Pod details list if available */}
+                  {k8sDeployment?.pods && k8sDeployment.pods.length > 0 && (
+                    <div className="pt-2 border-t border-zinc-900 space-y-1">
+                      <span className="text-zinc-500 block text-[10px] uppercase font-semibold">Pod Details</span>
+                      {k8sDeployment.pods.map((p) => (
+                        <div key={p.name} className="flex items-center justify-between text-[11px] bg-zinc-900/60 px-2 py-1 rounded">
+                          <span className="text-zinc-300 truncate max-w-[200px]">{p.name}</span>
+                          <div className="flex items-center gap-1.5">
+                            <span className={`px-1.5 py-0.5 rounded text-[10px] ${p.ready ? 'bg-emerald-500/20 text-emerald-400' : 'bg-amber-500/20 text-amber-400'}`}>
+                              {p.ready ? 'Ready' : p.phase}
+                            </span>
+                            {p.restart_count > 0 && (
+                              <span className="text-zinc-500 text-[10px]">(restarts: {p.restart_count})</span>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Actions: Deploy, Redeploy, Stop, Open Service */}
+                  <div className="pt-2 border-t border-zinc-900 flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      {!k8sDeployment || k8sDeployment.status === 'STOPPED' || k8sDeployment.status === 'FAILED' ? (
+                        <button
+                          id="k8s-deploy-btn"
+                          onClick={handleDeployK8s}
+                          disabled={deployingK8s}
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded bg-blue-600 hover:bg-blue-500 text-white transition text-xs font-semibold font-mono disabled:opacity-50 cursor-pointer"
+                        >
+                          <Play className={`w-3.5 h-3.5 ${deployingK8s ? 'animate-spin' : 'fill-current'}`} />
+                          <span>{deployingK8s ? 'Deploying...' : 'Deploy to Kubernetes'}</span>
+                        </button>
+                      ) : (
+                        <>
+                          <button
+                            id="k8s-redeploy-btn"
+                            onClick={handleRedeployK8s}
+                            disabled={deployingK8s}
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded bg-blue-600 hover:bg-blue-500 text-white transition text-xs font-semibold font-mono disabled:opacity-50 cursor-pointer"
+                          >
+                            <RefreshCw className={`w-3.5 h-3.5 ${deployingK8s ? 'animate-spin' : ''}`} />
+                            <span>{deployingK8s ? 'Updating...' : 'Redeploy'}</span>
+                          </button>
+                          <button
+                            id="k8s-stop-btn"
+                            onClick={handleStopK8s}
+                            disabled={deployingK8s}
+                            className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded bg-zinc-800 hover:bg-zinc-700 text-zinc-300 border border-zinc-700 transition text-xs font-mono disabled:opacity-50 cursor-pointer"
+                          >
+                            <span>Stop</span>
+                          </button>
+                        </>
+                      )}
+                    </div>
+
+                    {k8sDeployment?.status === 'RUNNING' && k8sDeployment.service_url && (
+                      <a
+                        id="k8s-open-deployment-link"
+                        href={k8sDeployment.service_url}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded bg-emerald-600/20 text-emerald-300 border border-emerald-500/40 hover:bg-emerald-600/30 transition text-xs font-semibold font-mono"
+                      >
+                        <span>Open Deployment</span>
+                        <ExternalLink className="w-3 h-3" />
+                      </a>
+                    )}
                   </div>
                 </div>
               </div>

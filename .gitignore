@@ -62,3 +62,24 @@ postgres_data/
 *~
 .DS_Store
 Thumbs.db
+
+# Terraform
+**/.terraform/
+*.tfstate
+*.tfstate.*
+*.tfplan
+*.tfrc
+crash.log
+crash.*.log
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+.terraformrc
+terraform.rc
+
+# Local Temporary & Machine Specific
+kubeconfig_temp.yaml
+*.tsbuildinfo
+.devforge/
+test_real_deploy.py

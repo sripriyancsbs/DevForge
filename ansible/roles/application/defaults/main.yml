@@ -1,0 +1,8 @@
+---
+# Default variables for DevForge Application Role
+app_name: "inventory-api"
+app_env: "development"
+app_port: 8000
+app_base_dir: "/tmp/devforge/apps"
+app_log_level: "info"
+app_managed_by: "ansible"

@@ -291,6 +291,13 @@ class ProvisioningService:
             job.completed_at = now
             job.error_message = None
 
+            try:
+                from app.core.metrics import record_provisioning_metric
+                duration = (now - job.created_at).total_seconds() if (job.created_at and now >= job.created_at) else None
+                record_provisioning_metric(job.template, "SUCCESS", duration)
+            except Exception:
+                pass
+
             # Update Application in database
             app.provisioning_status = "READY"
             app.status = "healthy"
@@ -402,11 +409,21 @@ class ProvisioningService:
                         details=f"Provisioning failed at step {job.current_step}: {err_str}",
                         created_at=now
                     ))
+                try:
+                    from app.core.metrics import record_provisioning_metric
+                    record_provisioning_metric(job.template, "FAILED")
+                except Exception:
+                    pass
             else:
                 # Retryable transient failure
                 job.status = "RETRY"
                 job.attempt += 1
                 job.error_message = f"Attempt {job.attempt - 1} failed: {err_str}"
+                try:
+                    from app.core.metrics import record_provisioning_metric
+                    record_provisioning_metric(job.template, "RETRY")
+                except Exception:
+                    pass
 
             db.commit()
             db.refresh(job)

@@ -70,6 +70,24 @@ class Application(Base):
         cascade="all, delete-orphan",
         order_by="desc(ContainerImage.created_at)"
     )
+    kubernetes_deployments = relationship(
+        "KubernetesDeployment",
+        back_populates="application",
+        cascade="all, delete-orphan",
+        order_by="desc(KubernetesDeployment.created_at)"
+    )
+    gitops_application = relationship(
+        "GitOpsApplication",
+        back_populates="application",
+        uselist=False,
+        cascade="all, delete-orphan"
+    )
+    remediation_events = relationship(
+        "RemediationEvent",
+        back_populates="application",
+        cascade="all, delete-orphan",
+        order_by="desc(RemediationEvent.created_at)"
+    )
 
     __table_args__ = (
         Index("ix_applications_status_env", "status", "environment"),
