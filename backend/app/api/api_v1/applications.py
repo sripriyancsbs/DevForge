@@ -201,6 +201,19 @@ def create_application(
         WorkspaceMember.user_id == current_user.id,
         WorkspaceMember.status == "active"
     ).first()
+
+    has_any_ws = db.query(WorkspaceMember).filter(WorkspaceMember.user_id == current_user.id).first() is not None
+    if not member and not has_any_ws and target_workspace.slug == "default-workspace" and getattr(current_user, "role", None):
+        member = WorkspaceMember(
+            workspace_id=target_workspace.id,
+            user_id=current_user.id,
+            role=current_user.role.upper(),
+            status="active"
+        )
+        db.add(member)
+        db.commit()
+        db.refresh(member)
+
     if not member or member.role.upper() not in ["DEVELOPER", "OPERATOR", "ADMIN"]:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,

@@ -218,6 +218,18 @@ def get_current_workspace(
         WorkspaceMember.status == "active"
     ).first()
 
+    has_any_ws = db.query(WorkspaceMember).filter(WorkspaceMember.user_id == current_user.id).first() is not None
+    if not member and not has_any_ws and workspace.slug == "default-workspace" and getattr(current_user, "role", None):
+        member = WorkspaceMember(
+            workspace_id=workspace.id,
+            user_id=current_user.id,
+            role=current_user.role.upper(),
+            status="active"
+        )
+        db.add(member)
+        db.commit()
+        db.refresh(member)
+
     if not member:
         logger.warning(
             f"Workspace isolation violation: User '{current_user.username}' attempted to access "
@@ -306,9 +318,9 @@ def verify_application_workspace_access(
     Protects against IDOR-style cross-workspace access attempts.
     """
     ws_id = getattr(application, "workspace_id", None)
-    if not ws_id:
-        def_ws = db.query(Workspace).filter(Workspace.slug == "default-workspace").first()
-        ws_id = def_ws.id if def_ws else None
+    def_ws = db.query(Workspace).filter(Workspace.slug == "default-workspace").first()
+    if not ws_id and def_ws:
+        ws_id = def_ws.id
 
     if not ws_id:
         raise HTTPException(
@@ -321,6 +333,18 @@ def verify_application_workspace_access(
         WorkspaceMember.user_id == current_user.id,
         WorkspaceMember.status == "active"
     ).first()
+
+    has_any_ws = db.query(WorkspaceMember).filter(WorkspaceMember.user_id == current_user.id).first() is not None
+    if not member and not has_any_ws and def_ws and ws_id == def_ws.id and getattr(current_user, "role", None):
+        member = WorkspaceMember(
+            workspace_id=def_ws.id,
+            user_id=current_user.id,
+            role=current_user.role.upper(),
+            status="active"
+        )
+        db.add(member)
+        db.commit()
+        db.refresh(member)
 
     if not member:
         logger.warning(
