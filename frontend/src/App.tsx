@@ -159,6 +159,18 @@ export const App: React.FC = () => {
   useEffect(() => {
     if (route.view === 'application-detail' && route.appIdentifier) {
       const identifier = route.appIdentifier.trim().toLowerCase();
+
+      // If activeApp already matches route.appIdentifier, keep it and clear any loading error
+      if (
+        activeApp &&
+        (activeApp.name.toLowerCase() === identifier ||
+          activeApp.slug.toLowerCase() === identifier ||
+          String(activeApp.id) === identifier)
+      ) {
+        setAppLoadingError(null);
+        return;
+      }
+
       // Look in existing applications
       const found = applications.find(
         (a) => a.name.toLowerCase() === identifier || a.slug.toLowerCase() === identifier || String(a.id) === identifier
@@ -173,17 +185,30 @@ export const App: React.FC = () => {
           .then((res) => {
             setActiveApp(res.application);
             setAppLoadingError(null);
+            setApplications((prev) => {
+              const exists = prev.some(
+                (a) => a.id === res.application.id || a.name.toLowerCase() === res.application.name.toLowerCase()
+              );
+              return exists ? prev : [res.application, ...prev];
+            });
           })
           .catch((err) => {
             setActiveApp(null);
-            setAppLoadingError(`Application "${route.appIdentifier}" was not found.`);
+            const errMsg = err?.message?.toLowerCase() || '';
+            if (errMsg.includes('forbidden') || errMsg.includes('403') || errMsg.includes('permission')) {
+              setAppLoadingError(`Access Denied: You do not have permission to view application "${route.appIdentifier}".`);
+            } else if (errMsg.includes('unauthorized') || errMsg.includes('401')) {
+              setAppLoadingError(`Authentication required to view application "${route.appIdentifier}".`);
+            } else {
+              setAppLoadingError(`Application "${route.appIdentifier}" was not found.`);
+            }
           });
       }
     } else {
       setActiveApp(null);
       setAppLoadingError(null);
     }
-  }, [route.view, route.appIdentifier, applications, loading]);
+  }, [route.view, route.appIdentifier, applications, loading, activeApp]);
 
   // Navigation handlers
   const handleSelectTab = (tab: NavigationTab) => {
@@ -228,8 +253,16 @@ export const App: React.FC = () => {
   const handleCreateApplication = async (data: any): Promise<any> => {
     const res = await api.createApplication(data);
     showToast(`Application '${res.application.name}' created and queued for provisioning`);
-    await loadPlatformData();
+    setActiveApp(res.application);
+    setAppLoadingError(null);
+    setApplications((prev) => {
+      const exists = prev.some(
+        (a) => a.id === res.application.id || a.name.toLowerCase() === res.application.name.toLowerCase()
+      );
+      return exists ? prev : [res.application, ...prev];
+    });
     handleSelectApplication(res.application.name, 'overview');
+    loadPlatformData();
     return res;
   };
 

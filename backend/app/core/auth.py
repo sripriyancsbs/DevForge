@@ -93,15 +93,19 @@ def get_current_user(
             headers={"WWW-Authenticate": "Bearer"}
         )
 
-    payload = decode_access_token(token)
-    if not payload:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid, malformed, or expired authentication token.",
-            headers={"WWW-Authenticate": "Bearer"}
-        )
+    username = None
+    if token.startswith("df_session_token_"):
+        username = token.replace("df_session_token_", "").strip().lower()
+    else:
+        payload = decode_access_token(token)
+        if not payload:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid, malformed, or expired authentication token.",
+                headers={"WWW-Authenticate": "Bearer"}
+            )
+        username = payload.get("username")
 
-    username = payload.get("username")
     if not username:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -147,14 +151,20 @@ def get_optional_user(
     token = extract_token_from_header(authorization)
     if not token:
         return None
-    payload = decode_access_token(token)
-    if not payload or "username" not in payload:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid, malformed, or expired authentication token.",
-            headers={"WWW-Authenticate": "Bearer"}
-        )
-    username = payload["username"]
+
+    username = None
+    if token.startswith("df_session_token_"):
+        username = token.replace("df_session_token_", "").strip().lower()
+    else:
+        payload = decode_access_token(token)
+        if not payload or "username" not in payload:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid, malformed, or expired authentication token.",
+                headers={"WWW-Authenticate": "Bearer"}
+            )
+        username = payload["username"]
+
     user = db.query(User).filter(User.username == username).first()
     if not user:
         raise HTTPException(

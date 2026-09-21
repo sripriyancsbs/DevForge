@@ -35,7 +35,7 @@ from app.models.remediation import RemediationEvent, RemediationExecution
 from app.services.remediation import policy_service
 from app.core.auth import require_role, get_optional_user, verify_application_workspace_access
 from app.models.user import User
-from sqlalchemy import desc
+from sqlalchemy import desc, or_
 
 logger = logging.getLogger("devforge.api.applications")
 router = APIRouter()
@@ -79,7 +79,11 @@ def list_applications(
                 return []
             query = query.filter(Application.workspace_id == target_ws_id)
         else:
-            query = query.filter(Application.workspace_id.in_(user_ws_ids))
+            def_ws = db.query(Workspace).filter(Workspace.slug == "default-workspace").first()
+            if def_ws and def_ws.id in user_ws_ids:
+                query = query.filter(or_(Application.workspace_id.in_(user_ws_ids), Application.workspace_id.is_(None)))
+            else:
+                query = query.filter(Application.workspace_id.in_(user_ws_ids))
 
     if search:
         search_fmt = f"%{search.lower()}%"
@@ -106,10 +110,16 @@ def get_application_details(
     current_user: Optional[User] = Depends(get_optional_user),
     db: Session = Depends(get_db)
 ):
-    if app_id_or_slug.isdigit():
-        app = db.query(Application).filter(Application.id == int(app_id_or_slug)).first()
+    clean_id = app_id_or_slug.strip()
+    if clean_id.isdigit():
+        app = db.query(Application).filter(Application.id == int(clean_id)).first()
     else:
-        app = db.query(Application).filter(Application.slug == app_id_or_slug.lower()).first()
+        app = db.query(Application).filter(
+            or_(
+                Application.slug == clean_id.lower(),
+                Application.name.ilike(clean_id)
+            )
+        ).first()
 
     if not app:
         raise HTTPException(
@@ -131,10 +141,29 @@ def get_application_details(
         (ServiceHealth.application_id == app.id) | (ServiceHealth.service_name == app.name)
     ).first()
 
+    latest_job = db.query(ProvisioningJob).filter(
+        ProvisioningJob.application_id == app.id
+    ).order_by(ProvisioningJob.created_at.desc()).first()
+
+    job_data = None
+    if latest_job:
+        job_data = {
+            "id": latest_job.id,
+            "application_id": latest_job.application_id,
+            "status": latest_job.status,
+            "current_step": latest_job.current_step,
+            "attempt": latest_job.attempt,
+            "max_attempts": latest_job.max_attempts,
+            "error_message": latest_job.error_message,
+            "created_at": latest_job.created_at.isoformat() if latest_job.created_at else None,
+            "completed_at": latest_job.completed_at.isoformat() if latest_job.completed_at else None
+        }
+
     return {
         "application": ApplicationResponse.model_validate(app),
         "deployments": [DeploymentResponse.model_validate(d) for d in deployments],
-        "health": ServiceHealthResponse.model_validate(health) if health else None
+        "health": ServiceHealthResponse.model_validate(health) if health else None,
+        "provisioning_job": job_data
     }
 
 

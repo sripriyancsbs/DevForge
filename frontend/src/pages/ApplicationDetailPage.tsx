@@ -137,6 +137,10 @@ export const ApplicationDetailPage: React.FC<ApplicationDetailPageProps> = ({
   const [manifestContent, setManifestContent] = useState<string>(app.manifest_yaml || '');
   const [copiedManifest, setCopiedManifest] = useState(false);
 
+  // 8b. Provisioning Job & Polling State
+  const [provisioningJob, setProvisioningJob] = useState<any>(null);
+  const [isRetryingJob, setIsRetryingJob] = useState(false);
+
   // 9. Redeploy Modal State
   const [showRedeployModal, setShowRedeployModal] = useState(false);
   const [redeployVersion, setRedeployVersion] = useState(app.version || 'v1.0.0');
@@ -286,6 +290,56 @@ spec:
         });
     }
   }, [app.id, app.name, app.manifest_yaml]);
+
+  // Auto-polling for provisioning state
+  useEffect(() => {
+    const isProvisioning =
+      app.provisioning_status === 'PENDING' ||
+      app.provisioning_status === 'PROVISIONING' ||
+      app.status === 'pending';
+
+    if (!isProvisioning) return;
+
+    let isMounted = true;
+    const interval = setInterval(async () => {
+      try {
+        const details = await api.getApplicationDetails(app.slug || app.name);
+        if (!isMounted) return;
+        if (details?.provisioning_job) {
+          setProvisioningJob(details.provisioning_job);
+        }
+        if (
+          details?.application &&
+          (details.application.provisioning_status === 'READY' ||
+            details.application.status === 'healthy' ||
+            details.application.provisioning_status === 'FAILED')
+        ) {
+          await onRefreshData();
+        }
+      } catch {
+        // Continue polling
+      }
+    }, 2000);
+
+    return () => {
+      isMounted = false;
+      clearInterval(interval);
+    };
+  }, [app.slug, app.name, app.provisioning_status, app.status, onRefreshData]);
+
+  const handleRetryProvisioning = async () => {
+    if (!provisioningJob?.id && !app.id) return;
+    setIsRetryingJob(true);
+    try {
+      const jobId = provisioningJob?.id || app.id;
+      await api.retryProvisioningJob(jobId);
+      await onRefreshData();
+    } catch (e) {
+      console.error('Failed to retry provisioning:', e);
+    } finally {
+      setIsRetryingJob(false);
+    }
+  };
 
   // Actions
   const handleRedeploySubmit = async (e: React.FormEvent) => {
@@ -587,6 +641,102 @@ spec:
             </button>
           </div>
         </div>
+
+        {/* Asynchronous Provisioning Status Banner */}
+        {(app.provisioning_status === 'PENDING' ||
+          app.provisioning_status === 'PROVISIONING' ||
+          app.status === 'pending' ||
+          app.provisioning_status === 'FAILED') && (
+          <div
+            id="provisioning-status-banner"
+            className={`mt-5 rounded-lg border p-4 sm:p-5 ${
+              app.provisioning_status === 'FAILED'
+                ? 'bg-rose-950/30 border-rose-800/60 text-rose-200'
+                : 'bg-amber-950/20 border-amber-800/40 text-amber-200'
+            }`}
+          >
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div className="flex items-start sm:items-center gap-3">
+                {app.provisioning_status === 'FAILED' ? (
+                  <AlertCircle className="w-5 h-5 text-rose-400 shrink-0 mt-0.5 sm:mt-0" />
+                ) : (
+                  <RefreshCw className="w-5 h-5 text-amber-400 shrink-0 animate-spin mt-0.5 sm:mt-0" />
+                )}
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h2 className="text-sm font-semibold font-mono tracking-tight text-white">
+                      {app.provisioning_status === 'FAILED'
+                        ? 'Application Provisioning Failed'
+                        : 'Application Provisioning in Progress'}
+                    </h2>
+                    <span
+                      className={`text-[10px] font-mono px-2 py-0.5 rounded uppercase font-semibold ${
+                        app.provisioning_status === 'FAILED'
+                          ? 'bg-rose-500/20 text-rose-300 border border-rose-500/30'
+                          : 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
+                      }`}
+                    >
+                      {app.provisioning_status || 'PENDING'}
+                    </span>
+                  </div>
+                  <p className="text-xs text-zinc-400 mt-1">
+                    {app.provisioning_status === 'FAILED'
+                      ? provisioningJob?.error_details || 'Provisioning step failed. You can inspect logs or retry the operation.'
+                      : `Scaffolding repository, CI/CD pipelines, and cloud resources for ${app.name}...`}
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2 shrink-0">
+                {app.provisioning_status === 'FAILED' && (
+                  <button
+                    id="retry-provisioning-btn"
+                    onClick={handleRetryProvisioning}
+                    disabled={isRetryingJob}
+                    className="px-3 py-1.5 bg-rose-600 hover:bg-rose-500 disabled:opacity-50 text-white rounded text-xs font-mono font-medium flex items-center gap-1.5 transition"
+                  >
+                    <RotateCcw className={`w-3.5 h-3.5 ${isRetryingJob ? 'animate-spin' : ''}`} />
+                    <span>{isRetryingJob ? 'Retrying...' : 'Retry Provisioning'}</span>
+                  </button>
+                )}
+                <button
+                  id="refresh-provisioning-btn"
+                  onClick={async () => {
+                    try {
+                      await onRefreshData();
+                    } catch {}
+                  }}
+                  className="px-3 py-1.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 rounded text-xs font-mono flex items-center gap-1.5 transition border border-zinc-700"
+                >
+                  <RefreshCw className="w-3.5 h-3.5" />
+                  <span>Refresh Status</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Stepper for Provisioning Stages */}
+            {app.provisioning_status !== 'FAILED' && (
+              <div className="mt-4 pt-4 border-t border-amber-800/20 grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs font-mono">
+                <div className="flex items-center gap-2 text-emerald-400">
+                  <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
+                  <span>Scaffolding Repo</span>
+                </div>
+                <div className="flex items-center gap-2 text-emerald-400">
+                  <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
+                  <span>Generating Manifest</span>
+                </div>
+                <div className="flex items-center gap-2 text-amber-400 animate-pulse">
+                  <Clock className="w-3.5 h-3.5 shrink-0" />
+                  <span>Configuring CI/CD</span>
+                </div>
+                <div className="flex items-center gap-2 text-zinc-500">
+                  <Clock className="w-3.5 h-3.5 shrink-0" />
+                  <span>Registering Service</span>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* ========================================================================= */}
         {/* 2. HORIZONTAL TAB NAVIGATION                                             */}

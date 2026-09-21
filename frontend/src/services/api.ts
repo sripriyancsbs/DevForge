@@ -70,6 +70,32 @@ const API_BASE = (import.meta as any).env?.VITE_API_BASE_URL || '/api/v1';
 const AUTH_TOKEN_KEY = 'devforge_auth_token';
 const AUTH_USER_KEY = 'devforge_auth_user';
 const ACTIVE_WORKSPACE_ID_KEY = 'devforge_active_workspace_id';
+const CREATED_APPLICATIONS_KEY = 'devforge_created_applications';
+
+export function getStoredApplications(): Application[] {
+  try {
+    const raw = localStorage.getItem(CREATED_APPLICATIONS_KEY);
+    if (!raw) return [];
+    return JSON.parse(raw);
+  } catch {
+    return [];
+  }
+}
+
+export function saveCreatedApplication(app: Application) {
+  try {
+    const apps = getStoredApplications();
+    const existingIndex = apps.findIndex(
+      (a) => a.id === app.id || a.name.toLowerCase() === app.name.toLowerCase() || a.slug.toLowerCase() === app.slug.toLowerCase()
+    );
+    if (existingIndex >= 0) {
+      apps[existingIndex] = { ...apps[existingIndex], ...app };
+    } else {
+      apps.unshift(app);
+    }
+    localStorage.setItem(CREATED_APPLICATIONS_KEY, JSON.stringify(apps));
+  } catch {}
+}
 
 export function getAuthToken(): string | null {
   try {
@@ -219,35 +245,84 @@ export const api = {
     if (params?.environment && params.environment !== 'all') searchParams.append('environment', params.environment);
 
     const qs = searchParams.toString() ? `?${searchParams.toString()}` : '';
-    let result = SEED_APPLICATIONS;
+
+    const stored = getStoredApplications();
+    const combined = [...stored];
+    for (const seedApp of SEED_APPLICATIONS) {
+      if (!combined.some(a => a.id === seedApp.id || a.name.toLowerCase() === seedApp.name.toLowerCase())) {
+        combined.push(seedApp);
+      }
+    }
+
+    let fallbackResult = combined;
     if (params?.search) {
       const q = params.search.toLowerCase();
-      result = result.filter(a => a.name.toLowerCase().includes(q) || a.description?.toLowerCase().includes(q));
+      fallbackResult = fallbackResult.filter(a => a.name.toLowerCase().includes(q) || a.description?.toLowerCase().includes(q));
     }
     if (params?.status && params.status !== 'all') {
-      result = result.filter(a => a.status === params.status);
+      fallbackResult = fallbackResult.filter(a => a.status === params.status);
     }
     if (params?.environment && params.environment !== 'all') {
-      result = result.filter(a => a.environment === params.environment);
+      fallbackResult = fallbackResult.filter(a => a.environment === params.environment);
     }
-    return requestJson(`${API_BASE}/applications${qs}`, undefined, result);
+
+    try {
+      const serverApps = await requestJson<Application[]>(`${API_BASE}/applications${qs}`, undefined, undefined);
+      if (Array.isArray(serverApps)) {
+        const merged = [...serverApps];
+        for (const s of stored) {
+          if (!merged.some(m => m.id === s.id || m.name.toLowerCase() === s.name.toLowerCase() || m.slug.toLowerCase() === s.slug.toLowerCase())) {
+            merged.unshift(s);
+          }
+        }
+        return merged;
+      }
+    } catch {
+      // Backend unavailable, return stored/seed
+    }
+
+    return fallbackResult;
   },
 
-  async getApplicationDetails(idOrSlug: string | number): Promise<{ application: Application; deployments: Deployment[]; health: any }> {
-    const app = SEED_APPLICATIONS.find(a => String(a.id) === String(idOrSlug) || a.slug === idOrSlug || a.name === idOrSlug);
-    const fallback = app ? {
-      application: app,
-      deployments: SEED_DEPLOYMENTS.filter(d => d.application_id === app.id),
+  async getApplicationDetails(idOrSlug: string | number): Promise<{ application: Application; deployments: Deployment[]; health: any; provisioning_job?: any }> {
+    const cleanId = String(idOrSlug).trim().toLowerCase();
+    const stored = getStoredApplications();
+    const localApp = stored.find(a => String(a.id) === cleanId || a.slug.toLowerCase() === cleanId || a.name.toLowerCase() === cleanId)
+      || SEED_APPLICATIONS.find(a => String(a.id) === cleanId || a.slug.toLowerCase() === cleanId || a.name.toLowerCase() === cleanId);
+
+    const fallback = localApp ? {
+      application: localApp,
+      deployments: SEED_DEPLOYMENTS.filter(d => d.application_id === localApp.id),
       health: {
-        status: app.status,
+        status: localApp.status,
         cpu_percent: 18.4,
         memory_mb: '184 MB',
         requests_per_sec: 142,
         error_rate: '0.00%',
         uptime: '99.98%'
-      }
+      },
+      provisioning_job: (localApp as any).provisioning_job || null
     } : undefined;
-    return requestJson(`${API_BASE}/applications/${idOrSlug}`, undefined, fallback);
+
+    try {
+      const res = await requestJson<{ application: Application; deployments: Deployment[]; health: any; provisioning_job?: any }>(
+        `${API_BASE}/applications/${idOrSlug}`,
+        undefined,
+        fallback
+      );
+      if (res && res.application) {
+        saveCreatedApplication(res.application);
+        return res;
+      }
+    } catch (err: any) {
+      if (fallback) {
+        return fallback;
+      }
+      throw err;
+    }
+
+    if (fallback) return fallback;
+    throw new Error(`Application "${idOrSlug}" was not found.`);
   },
 
   async getApplicationManifest(idOrSlug: string | number): Promise<string> {
@@ -340,26 +415,39 @@ export const api = {
       branch: data.branch || 'main',
       environment: data.environment || 'production',
       version: data.version || 'v1.0.0',
-      status: 'healthy',
+      status: 'pending',
       port: data.port || selectedTemplate?.default_values?.port || 8000,
       replicas: data.replicas || 1,
       database_type: data.database_type,
       deployment_strategy: data.deployment_strategy || 'rolling',
-      provisioning_status: 'READY',
+      provisioning_status: 'PENDING',
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString()
     };
     const fallback: ApplicationProvisioningResponse = {
       application: newApp,
-      provisioning_status: 'READY',
+      provisioning_status: 'PENDING',
       files_generated: selectedTemplate?.generated_project_structure || ['Dockerfile', 'main.py', 'requirements.txt'],
-      message: 'Application provisioned successfully'
+      message: 'Application created and queued for provisioning'
     };
-    return requestJson(`${API_BASE}/applications`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(data)
-    }, fallback);
+
+    try {
+      const res = await requestJson<ApplicationProvisioningResponse>(`${API_BASE}/applications`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data)
+      }, fallback);
+
+      if (res && res.application) {
+        saveCreatedApplication(res.application);
+        return res;
+      }
+    } catch {
+      saveCreatedApplication(fallback.application);
+      return fallback;
+    }
+    saveCreatedApplication(fallback.application);
+    return fallback;
   },
 
   async getDeployments(params?: { status?: string; environment?: string; application_id?: number }): Promise<Deployment[]> {
