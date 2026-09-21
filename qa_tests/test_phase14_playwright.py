@@ -312,6 +312,7 @@ class Phase14PlaywrightSuite:
 
 
 if __name__ == "__main__":
-    suite = Phase14PlaywrightSuite()
+    target_url = sys.argv[1] if len(sys.argv) > 1 else BASE_URL
+    suite = Phase14PlaywrightSuite(base_url=target_url)
     success = suite.run_all()
     sys.exit(0 if success else 1)

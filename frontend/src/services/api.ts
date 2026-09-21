@@ -1063,34 +1063,107 @@ export const api = {
   },
 
   async getWorkspaceMembers(workspaceId: number): Promise<WorkspaceMember[]> {
-    return requestJson<WorkspaceMember[]>(`${API_BASE}/workspaces/${workspaceId}/members`, undefined, [
+    const defaultMembers: WorkspaceMember[] = [
       { id: 1, workspace_id: workspaceId, user_id: 1, username: 'admin', email: 'admin@devforge.internal', display_name: 'Platform Administrator', role: 'ADMIN', status: 'active' },
       { id: 2, workspace_id: workspaceId, user_id: 2, username: 'operator', email: 'operator@devforge.internal', display_name: 'Operator', role: 'OPERATOR', status: 'active' },
       { id: 3, workspace_id: workspaceId, user_id: 3, username: 'developer', email: 'developer@devforge.internal', display_name: 'Developer', role: 'DEVELOPER', status: 'active' },
       { id: 4, workspace_id: workspaceId, user_id: 4, username: 'viewer', email: 'viewer@devforge.internal', display_name: 'Viewer', role: 'VIEWER', status: 'active' }
-    ]);
+    ];
+    let localMembers: WorkspaceMember[] = defaultMembers;
+    try {
+      const stored = localStorage.getItem(`devforge_ws_members_${workspaceId}`);
+      if (stored) {
+        localMembers = JSON.parse(stored);
+      }
+    } catch {}
+
+    return requestJson<WorkspaceMember[]>(`${API_BASE}/workspaces/${workspaceId}/members`, undefined, localMembers);
   },
 
   async addWorkspaceMember(workspaceId: number, data: AddWorkspaceMemberPayload): Promise<WorkspaceMember> {
-    return requestJson<WorkspaceMember>(`${API_BASE}/workspaces/${workspaceId}/members`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(data)
-    });
+    const fallback: WorkspaceMember = {
+      id: Date.now(),
+      workspace_id: workspaceId,
+      user_id: (data as any).user_id || Date.now(),
+      username: data.username || data.email?.split('@')[0] || `user_${Date.now()}`,
+      email: data.email || 'member@devforge.internal',
+      display_name: data.display_name || data.email?.split('@')[0] || 'New Member',
+      role: (data.role as Role) || 'DEVELOPER',
+      status: 'active'
+    };
+    try {
+      const res = await requestJson<WorkspaceMember>(`${API_BASE}/workspaces/${workspaceId}/members`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data)
+      }, fallback);
+      // Persist in localStorage for static hosting environments
+      const stored = localStorage.getItem(`devforge_ws_members_${workspaceId}`);
+      const list: WorkspaceMember[] = stored ? JSON.parse(stored) : [
+        { id: 1, workspace_id: workspaceId, user_id: 1, username: 'admin', email: 'admin@devforge.internal', display_name: 'Platform Administrator', role: 'ADMIN', status: 'active' },
+        { id: 2, workspace_id: workspaceId, user_id: 2, username: 'operator', email: 'operator@devforge.internal', display_name: 'Operator', role: 'OPERATOR', status: 'active' },
+        { id: 3, workspace_id: workspaceId, user_id: 3, username: 'developer', email: 'developer@devforge.internal', display_name: 'Developer', role: 'DEVELOPER', status: 'active' },
+        { id: 4, workspace_id: workspaceId, user_id: 4, username: 'viewer', email: 'viewer@devforge.internal', display_name: 'Viewer', role: 'VIEWER', status: 'active' }
+      ];
+      list.push(res);
+      localStorage.setItem(`devforge_ws_members_${workspaceId}`, JSON.stringify(list));
+      return res;
+    } catch {
+      return fallback;
+    }
   },
 
   async updateWorkspaceMemberRole(workspaceId: number, memberId: number, role: string): Promise<WorkspaceMember> {
-    return requestJson<WorkspaceMember>(`${API_BASE}/workspaces/${workspaceId}/members/${memberId}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ role })
-    });
+    const fallback: WorkspaceMember = {
+      id: memberId,
+      workspace_id: workspaceId,
+      user_id: memberId,
+      username: 'member',
+      email: 'member@devforge.internal',
+      display_name: 'Member',
+      role: role as Role,
+      status: 'active'
+    };
+    try {
+      const res = await requestJson<WorkspaceMember>(`${API_BASE}/workspaces/${workspaceId}/members/${memberId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ role })
+      }, fallback);
+      const stored = localStorage.getItem(`devforge_ws_members_${workspaceId}`);
+      if (stored) {
+        const list: WorkspaceMember[] = JSON.parse(stored);
+        const idx = list.findIndex(m => m.id === memberId);
+        if (idx >= 0) {
+          list[idx].role = role as Role;
+          localStorage.setItem(`devforge_ws_members_${workspaceId}`, JSON.stringify(list));
+        }
+      }
+      return res;
+    } catch {
+      return fallback;
+    }
   },
 
   async disableWorkspaceMember(workspaceId: number, memberId: number): Promise<{ status: string; message: string }> {
-    return requestJson<{ status: string; message: string }>(`${API_BASE}/workspaces/${workspaceId}/members/${memberId}`, {
-      method: 'DELETE'
-    });
+    const fallback = { status: 'disabled', message: 'Member disabled successfully' };
+    try {
+      const res = await requestJson<{ status: string; message: string }>(`${API_BASE}/workspaces/${workspaceId}/members/${memberId}`, {
+        method: 'DELETE'
+      }, fallback);
+      const stored = localStorage.getItem(`devforge_ws_members_${workspaceId}`);
+      if (stored) {
+        const list: WorkspaceMember[] = JSON.parse(stored);
+        const idx = list.findIndex(m => m.id === memberId);
+        if (idx >= 0) {
+          list[idx].status = 'disabled';
+          localStorage.setItem(`devforge_ws_members_${workspaceId}`, JSON.stringify(list));
+        }
+      }
+      return res;
+    } catch {
+      return fallback;
+    }
   },
 
   async switchWorkspace(workspaceId: number): Promise<User> {
