@@ -3,8 +3,16 @@ from pydantic import BaseModel, Field, ConfigDict
 
 
 class LoginRequest(BaseModel):
-    username: str = Field(..., min_length=1, max_length=50, description="Username")
+    username: Optional[str] = Field(None, min_length=1, max_length=120, description="Username or Email")
+    email: Optional[str] = Field(None, description="Email address")
     password: str = Field(..., min_length=1, description="Password")
+
+
+class SignUpRequest(BaseModel):
+    name: str = Field(..., min_length=2, max_length=100, description="Full Name")
+    email: str = Field(..., min_length=3, max_length=120, description="Email address")
+    password: str = Field(..., min_length=8, max_length=128, description="Password (min 8 characters)")
+    confirm_password: str = Field(..., min_length=8, max_length=128, description="Confirm Password")
 
 
 class UserWorkspaceInfo(BaseModel):

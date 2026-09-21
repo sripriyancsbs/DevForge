@@ -97,15 +97,95 @@ export function saveCreatedApplication(app: Application) {
   } catch {}
 }
 
+const REGISTERED_USERS_KEY = 'devforge_registered_users';
+
+interface StoredCredentialUser {
+  id: number;
+  name: string;
+  email: string;
+  username: string;
+  password: string;
+  role: Role;
+  workspaces: any[];
+  active_workspace: any;
+  permissions: string[];
+}
+
+const BASELINE_USERS: StoredCredentialUser[] = [
+  {
+    id: 1,
+    name: 'Platform Administrator',
+    username: 'admin',
+    email: 'admin@devforge.internal',
+    password: 'AdminPassword123!',
+    role: 'ADMIN',
+    workspaces: [
+      { id: 1, name: 'Default Workspace', slug: 'default-workspace', role: 'ADMIN' },
+      { id: 2, name: 'Staging Workspace', slug: 'staging-workspace', role: 'ADMIN' }
+    ],
+    active_workspace: { id: 1, name: 'Default Workspace', slug: 'default-workspace', role: 'ADMIN' },
+    permissions: ['view:all', 'deploy:trigger', 'infra:apply', 'remediation:approve', 'ansible:execute', 'workspace:manage', 'members:manage']
+  },
+  {
+    id: 2,
+    name: 'Platform Operator',
+    username: 'operator',
+    email: 'operator@devforge.internal',
+    password: 'OperatorPassword123!',
+    role: 'OPERATOR',
+    workspaces: [
+      { id: 1, name: 'Default Workspace', slug: 'default-workspace', role: 'OPERATOR' }
+    ],
+    active_workspace: { id: 1, name: 'Default Workspace', slug: 'default-workspace', role: 'OPERATOR' },
+    permissions: ['view:all', 'deploy:trigger', 'infra:plan', 'remediation:approve', 'ansible:execute']
+  },
+  {
+    id: 3,
+    name: 'Software Developer',
+    username: 'developer',
+    email: 'developer@devforge.internal',
+    password: 'DeveloperPassword123!',
+    role: 'DEVELOPER',
+    workspaces: [
+      { id: 1, name: 'Default Workspace', slug: 'default-workspace', role: 'DEVELOPER' }
+    ],
+    active_workspace: { id: 1, name: 'Default Workspace', slug: 'default-workspace', role: 'DEVELOPER' },
+    permissions: ['view:all', 'deploy:trigger']
+  },
+  {
+    id: 4,
+    name: 'Auditor Viewer',
+    username: 'viewer',
+    email: 'viewer@devforge.internal',
+    password: 'ViewerPassword123!',
+    role: 'VIEWER',
+    workspaces: [
+      { id: 1, name: 'Default Workspace', slug: 'default-workspace', role: 'VIEWER' }
+    ],
+    active_workspace: { id: 1, name: 'Default Workspace', slug: 'default-workspace', role: 'VIEWER' },
+    permissions: ['view:all']
+  }
+];
+
+function getStoredRegisteredUsers(): StoredCredentialUser[] {
+  try {
+    const raw = localStorage.getItem(REGISTERED_USERS_KEY);
+    if (raw) return JSON.parse(raw);
+  } catch {}
+  return [];
+}
+
+function saveStoredRegisteredUsers(users: StoredCredentialUser[]) {
+  try {
+    localStorage.setItem(REGISTERED_USERS_KEY, JSON.stringify(users));
+  } catch {}
+}
+
 export function getAuthToken(): string | null {
   try {
-    const token = localStorage.getItem(AUTH_TOKEN_KEY);
-    if (token) return token;
-    const defaultToken = 'df_session_token_admin';
-    localStorage.setItem(AUTH_TOKEN_KEY, defaultToken);
-    return defaultToken;
+    return localStorage.getItem(AUTH_TOKEN_KEY);
   } catch {
-    return 'df_session_token_admin';
+    return null;
   }
 }
 
@@ -122,10 +202,10 @@ export function getActiveWorkspaceId(): number {
       return Number(raw);
     }
     const user = getStoredUser();
-    if (user.active_workspace?.id) {
+    if (user && user.active_workspace?.id) {
       return user.active_workspace.id;
     }
-    if (user.workspaces && user.workspaces.length > 0) {
+    if (user && user.workspaces && user.workspaces.length > 0) {
       return user.workspaces[0].id;
     }
   } catch {}
@@ -146,33 +226,23 @@ export function clearAuthToken() {
   } catch {}
 }
 
-export function getStoredUser(): User {
+export function getStoredUser(): User | null {
   try {
     const raw = localStorage.getItem(AUTH_USER_KEY);
     if (raw) {
       return JSON.parse(raw);
     }
   } catch {}
-  return {
-    id: 1,
-    username: 'admin',
-    email: 'admin@devforge.internal',
-    display_name: 'Platform Administrator',
-    role: 'ADMIN',
-    is_active: true,
-    status: 'active',
-    workspaces: [
-      { id: 1, name: 'Default Workspace', slug: 'default-workspace', role: 'ADMIN' },
-      { id: 2, name: 'Staging Workspace', slug: 'staging-workspace', role: 'ADMIN' }
-    ],
-    active_workspace: { id: 1, name: 'Default Workspace', slug: 'default-workspace', role: 'ADMIN' },
-    permissions: ['view:all', 'deploy:trigger', 'infra:apply', 'remediation:approve', 'ansible:execute', 'workspace:manage', 'members:manage']
-  };
+  return null;
 }
 
-export function setStoredUser(user: User) {
+export function setStoredUser(user: User | null) {
   try {
-    localStorage.setItem(AUTH_USER_KEY, JSON.stringify(user));
+    if (user) {
+      localStorage.setItem(AUTH_USER_KEY, JSON.stringify(user));
+    } else {
+      localStorage.removeItem(AUTH_USER_KEY);
+    }
   } catch {}
 }
 
@@ -1055,56 +1125,204 @@ export const api = {
   },
 
   // Authentication & RBAC API
-  async login(username: string, password: string): Promise<TokenResponse> {
-    const fallbackUser: User = {
-      id: 1,
-      username: username,
-      email: `${username}@devforge.internal`,
-      role: (['admin', 'operator', 'developer', 'viewer'].includes(username.toLowerCase())
-        ? username.toUpperCase()
-        : 'VIEWER') as Role,
-      is_active: true,
-      permissions: ['view:all', 'deploy:trigger', 'infra:apply', 'remediation:approve']
-    };
-    const fallbackResponse: TokenResponse = {
-      access_token: `df_jwt_${username}_${Date.now()}`,
-      token_type: 'bearer',
-      expires_in: 28800,
-      user: fallbackUser
-    };
+  async login(identifier: string, password: string): Promise<TokenResponse> {
+    const cleanId = identifier.trim();
+    if (!cleanId || !password) {
+      throw new Error('Email or username and password are required.');
+    }
 
-    if (typeof window !== 'undefined' && window.location.hostname.includes('vercel.app')) {
-      setAuthToken(fallbackResponse.access_token);
-      setStoredUser(fallbackResponse.user);
-      return fallbackResponse;
+    // Attempt real backend login first
+    try {
+      const res = await fetch(`${API_BASE}/auth/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: cleanId, username: cleanId, password })
+      });
+      if (res.ok) {
+        const data: TokenResponse = await res.json();
+        setAuthToken(data.access_token);
+        setStoredUser(data.user);
+        if (data.user.active_workspace?.id) {
+          setActiveWorkspaceId(data.user.active_workspace.id);
+        }
+        return data;
+      } else if (res.status === 401 || res.status === 400 || res.status === 403) {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.detail || 'Invalid email or password.');
+      } else if (res.status === 429) {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.detail || 'Too many requests. Please wait a moment and try again.');
+      } else {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.detail || 'Failed to sign in.');
+      }
+    } catch (err: any) {
+      if (err.message && (
+        err.message.includes('Invalid') || 
+        err.message.includes('Account is deactivated') || 
+        err.message.includes('Contact system administrator') ||
+        err.message.includes('Too many requests')
+      )) {
+        throw err;
+      }
+      // If network/offline or on static host (Vercel preview without backend tunnel), verify credentials
+      const registered = getStoredRegisteredUsers();
+      const allUsers = [...BASELINE_USERS, ...registered];
+      const found = allUsers.find(
+        (u) => u.email.toLowerCase() === cleanId.toLowerCase() || u.username.toLowerCase() === cleanId.toLowerCase()
+      );
+      if (!found || found.password !== password) {
+        throw new Error('Invalid email or password.');
+      }
+
+      const userObj: User = {
+        id: found.id,
+        username: found.username,
+        email: found.email,
+        display_name: found.name,
+        role: found.role,
+        is_active: true,
+        status: 'active',
+        workspaces: found.workspaces,
+        active_workspace: found.active_workspace,
+        permissions: found.permissions
+      };
+      const tokenResp: TokenResponse = {
+        access_token: `df_session_token_${found.username}`,
+        token_type: 'bearer',
+        expires_in: 28800,
+        user: userObj
+      };
+      setAuthToken(tokenResp.access_token);
+      setStoredUser(userObj);
+      if (userObj.active_workspace?.id) {
+        setActiveWorkspaceId(userObj.active_workspace.id);
+      }
+      return tokenResp;
+    }
+    throw new Error('Invalid email or password.');
+  },
+
+  async signup(payload: {
+    name: string;
+    email: string;
+    password: string;
+    confirm_password: string;
+  }): Promise<TokenResponse> {
+    const name = payload.name.trim();
+    const email = payload.email.trim().toLowerCase();
+    const password = payload.password;
+    const confirm_password = payload.confirm_password;
+
+    if (!name || !email || !password || !confirm_password) {
+      throw new Error('All fields are required.');
+    }
+    if (!email.includes('@') || !email.split('@')[1]?.includes('.')) {
+      throw new Error('A valid email address is required.');
+    }
+    if (password !== confirm_password) {
+      throw new Error('Passwords do not match.');
+    }
+    if (password.length < 8) {
+      throw new Error('Password must be at least 8 characters long.');
     }
 
     try {
-      const res = await requestJson<TokenResponse>(`${API_BASE}/auth/login`, {
+      const res = await fetch(`${API_BASE}/auth/signup`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username, password })
-      }, fallbackResponse);
-      setAuthToken(res.access_token);
-      setStoredUser(res.user);
-      if (res.user.active_workspace?.id) {
-        setActiveWorkspaceId(res.user.active_workspace.id);
+        body: JSON.stringify({ name, email, password, confirm_password })
+      });
+      if (res.ok) {
+        const data: TokenResponse = await res.json();
+        setAuthToken(data.access_token);
+        setStoredUser(data.user);
+        if (data.user.active_workspace?.id) {
+          setActiveWorkspaceId(data.user.active_workspace.id);
+        }
+        return data;
+      } else {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.detail || 'Failed to sign up.');
       }
-      return res;
-    } catch {
-      setAuthToken(fallbackResponse.access_token);
-      setStoredUser(fallbackResponse.user);
-      return fallbackResponse;
+    } catch (err: any) {
+      if (err.message && !err.message.includes('Failed to fetch') && !err.message.includes('NetworkError') && !err.message.includes('Load failed')) {
+        throw err;
+      }
+      const registered = getStoredRegisteredUsers();
+      const allUsers = [...BASELINE_USERS, ...registered];
+      if (allUsers.some((u) => u.email.toLowerCase() === email)) {
+        throw new Error('An account with this email already exists.');
+      }
+
+      const username = email.split('@')[0].replace(/[^a-zA-Z0-9_-]/g, '') || 'user';
+      const newUser: StoredCredentialUser = {
+        id: 100 + registered.length,
+        name,
+        username,
+        email,
+        password,
+        role: 'DEVELOPER', // Authoritative server/fallback rule: NEVER ADMIN
+        workspaces: [
+          { id: 1, name: 'Default Workspace', slug: 'default-workspace', role: 'DEVELOPER' }
+        ],
+        active_workspace: { id: 1, name: 'Default Workspace', slug: 'default-workspace', role: 'DEVELOPER' },
+        permissions: ['view:all', 'deploy:trigger']
+      };
+      registered.push(newUser);
+      saveStoredRegisteredUsers(registered);
+
+      const userObj: User = {
+        id: newUser.id,
+        username: newUser.username,
+        email: newUser.email,
+        display_name: newUser.name,
+        role: newUser.role,
+        is_active: true,
+        status: 'active',
+        workspaces: newUser.workspaces,
+        active_workspace: newUser.active_workspace,
+        permissions: newUser.permissions
+      };
+      const tokenResp: TokenResponse = {
+        access_token: `df_jwt_${newUser.username}_${Date.now()}`,
+        token_type: 'bearer',
+        expires_in: 28800,
+        user: userObj
+      };
+      setAuthToken(tokenResp.access_token);
+      setStoredUser(userObj);
+      setActiveWorkspaceId(1);
+      return tokenResp;
     }
   },
 
-  async getCurrentUser(): Promise<User> {
-    return requestJson<User>(`${API_BASE}/auth/me`, undefined, getStoredUser());
+  async getCurrentUser(): Promise<User | null> {
+    const token = getAuthToken();
+    if (!token) return null;
+    try {
+      const res = await fetch(`${API_BASE}/auth/me`, {
+        headers: getAuthHeaders()
+      });
+      if (res.ok) {
+        const user: User = await res.json();
+        setStoredUser(user);
+        return user;
+      }
+      if (res.status === 401) {
+        clearAuthToken();
+        return null;
+      }
+    } catch {}
+    return getStoredUser();
   },
 
   async logout(): Promise<void> {
     try {
-      await requestJson(`${API_BASE}/auth/logout`, { method: 'POST' });
+      await fetch(`${API_BASE}/auth/logout`, {
+        method: 'POST',
+        headers: getAuthHeaders()
+      });
     } catch {}
     clearAuthToken();
   },
@@ -1118,7 +1336,7 @@ export const api = {
         slug: 'default-workspace',
         description: 'Primary engineering workspace for core platform services',
         status: 'active',
-        current_user_role: getStoredUser().role,
+        current_user_role: getStoredUser()?.role || 'DEVELOPER',
         member_count: 4,
         application_count: 5
       },
@@ -1128,7 +1346,7 @@ export const api = {
         slug: 'staging-workspace',
         description: 'Secondary isolated staging workspace for pre-release validation',
         status: 'active',
-        current_user_role: getStoredUser().role,
+        current_user_role: getStoredUser()?.role || 'DEVELOPER',
         member_count: 2,
         application_count: 1
       }
@@ -1144,7 +1362,7 @@ export const api = {
       slug: 'default-workspace',
       description: 'Primary engineering workspace for core platform services',
       status: 'active',
-      current_user_role: getStoredUser().role,
+      current_user_role: getStoredUser()?.role || 'DEVELOPER',
       member_count: 4,
       application_count: 5
     });
@@ -1266,6 +1484,7 @@ export const api = {
       }
     } catch {}
     const current = getStoredUser();
+    if (!current) return null as any;
     const ws = current.workspaces?.find(w => w.id === workspaceId);
     if (ws) {
       const updated: User = {
@@ -1279,8 +1498,9 @@ export const api = {
     return current;
   },
 
-  switchRoleSession(role: Role): User {
+  switchRoleSession(role: Role): User | null {
     const current = getStoredUser();
+    if (!current) return null;
     const updated: User = {
       ...current,
       username: role.toLowerCase(),

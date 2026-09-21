@@ -7,12 +7,14 @@ import { ApplicationDetailPage, AppDetailTab } from './pages/ApplicationDetailPa
 import { CreateApplicationPage } from './pages/CreateApplicationPage';
 import { ActivityPage } from './pages/ActivityPage';
 import { SettingsPage } from './pages/SettingsPage';
-import { api, getAuthToken } from './services/api';
-import { Application, Deployment, Environment, OverviewData } from './types';
-import { Box, ArrowLeft, AlertCircle } from 'lucide-react';
+import { SignInPage } from './pages/SignInPage';
+import { SignUpPage } from './pages/SignUpPage';
+import { api, getAuthToken, getStoredUser, setStoredUser, clearAuthToken } from './services/api';
+import { Application, Deployment, Environment, OverviewData, User } from './types';
+import { ArrowLeft, AlertCircle } from 'lucide-react';
 
 interface RouteState {
-  view: 'overview' | 'applications' | 'create-application' | 'application-detail' | 'activity' | 'settings';
+  view: 'overview' | 'applications' | 'create-application' | 'application-detail' | 'activity' | 'settings' | 'signin' | 'signup';
   appIdentifier?: string;
   appTab?: AppDetailTab;
 }
@@ -20,6 +22,15 @@ interface RouteState {
 const parseRoute = (pathname: string): RouteState => {
   const clean = pathname.replace(/^\/+|\/+$/g, '');
   const segments = clean.split('/').filter(Boolean);
+
+  if (segments.length > 0) {
+    if (segments[0] === 'signin' || segments[0] === 'login') {
+      return { view: 'signin' };
+    }
+    if (segments[0] === 'signup' || segments[0] === 'register') {
+      return { view: 'signup' };
+    }
+  }
 
   if (segments.length === 0 || segments[0] === 'overview') {
     return { view: 'overview' };
@@ -72,9 +83,17 @@ const parseRoute = (pathname: string): RouteState => {
 };
 
 export const App: React.FC = () => {
-  const [route, setRoute] = useState<RouteState>(() =>
-    typeof window !== 'undefined' ? parseRoute(window.location.pathname) : { view: 'overview' }
-  );
+  const [currentUser, setCurrentUser] = useState<User | null>(() => getStoredUser());
+  const [route, setRoute] = useState<RouteState>(() => {
+    if (typeof window === 'undefined') return { view: 'signin' };
+    const parsed = parseRoute(window.location.pathname);
+    const token = getAuthToken();
+    if (!token) {
+      if (parsed.view === 'signup') return { view: 'signup' };
+      return { view: 'signin' };
+    }
+    return parsed;
+  });
 
   const [isMobileNavOpen, setIsMobileNavOpen] = useState(false);
 
@@ -83,7 +102,7 @@ export const App: React.FC = () => {
   const [applications, setApplications] = useState<Application[]>([]);
   const [environments, setEnvironments] = useState<Environment[]>([]);
   const [deployments, setDeployments] = useState<Deployment[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
 
   // Dedicated detail page application state (loaded from cache or on demand)
   const [activeApp, setActiveApp] = useState<Application | null>(null);
@@ -97,12 +116,34 @@ export const App: React.FC = () => {
     setTimeout(() => setToastMessage(null), 3500);
   };
 
+  const handleLogout = useCallback(async () => {
+    clearAuthToken();
+    setCurrentUser(null);
+    setOverviewData(null);
+    setApplications([]);
+    setEnvironments([]);
+    setDeployments([]);
+    setActiveApp(null);
+    setAppLoadingError(null);
+    if (typeof window !== 'undefined') {
+      window.history.replaceState({ view: 'signin' }, '', '/signin');
+    }
+    setRoute({ view: 'signin' });
+    try {
+      await api.logout();
+    } catch {
+      // Ignore network errors on logout
+    }
+  }, []);
+
   // Push route to history
   const navigateToRoute = useCallback((newRoute: RouteState, updateHistory = true) => {
     setRoute(newRoute);
     if (updateHistory && typeof window !== 'undefined') {
       let targetPath = '/';
-      if (newRoute.view === 'overview') targetPath = '/';
+      if (newRoute.view === 'signin') targetPath = '/signin';
+      else if (newRoute.view === 'signup') targetPath = '/signup';
+      else if (newRoute.view === 'overview') targetPath = '/';
       else if (newRoute.view === 'applications') targetPath = '/applications';
       else if (newRoute.view === 'create-application') targetPath = '/applications/create';
       else if (newRoute.view === 'activity') targetPath = '/activity';
@@ -119,10 +160,54 @@ export const App: React.FC = () => {
     }
   }, []);
 
+  // Check auth session on startup
+  useEffect(() => {
+    const token = getAuthToken();
+    if (!token) {
+      setCurrentUser(null);
+      if (route.view !== 'signup' && route.view !== 'signin') {
+        window.history.replaceState({ view: 'signin' }, '', '/signin');
+        setRoute({ view: 'signin' });
+      }
+      return;
+    }
+
+    api.getCurrentUser()
+      .then((u) => {
+        if (u) {
+          setCurrentUser(u);
+          setStoredUser(u);
+        } else {
+          handleLogout();
+        }
+      })
+      .catch(() => {
+        handleLogout();
+      });
+  }, [handleLogout]);
+
+  // Protected route guard: redirect to /signin if unauthenticated
+  useEffect(() => {
+    if (!currentUser) {
+      if (route.view !== 'signin' && route.view !== 'signup') {
+        window.history.replaceState({ view: 'signin' }, '', '/signin');
+        setRoute({ view: 'signin' });
+      }
+    }
+  }, [currentUser, route.view]);
+
   // Listen to browser Back / Forward
   useEffect(() => {
     const handlePopState = () => {
       const parsed = parseRoute(window.location.pathname);
+      const token = getAuthToken();
+      if (!token) {
+        if (parsed.view !== 'signin' && parsed.view !== 'signup') {
+          window.history.replaceState({ view: 'signin' }, '', '/signin');
+          setRoute({ view: 'signin' });
+          return;
+        }
+      }
       setRoute(parsed);
     };
     window.addEventListener('popstate', handlePopState);
@@ -131,6 +216,10 @@ export const App: React.FC = () => {
 
   // Fetch initial platform data
   const loadPlatformData = useCallback(async () => {
+    if (!getAuthToken()) {
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     try {
       const [ov, apps, envs, deps] = await Promise.all([
@@ -152,15 +241,24 @@ export const App: React.FC = () => {
   }, []);
 
   useEffect(() => {
+    if (currentUser) {
+      loadPlatformData();
+    }
+  }, [currentUser, loadPlatformData]);
+
+  const handleAuthSuccess = (user: User) => {
+    setCurrentUser(user);
+    setStoredUser(user);
     loadPlatformData();
-  }, [loadPlatformData]);
+    navigateToRoute({ view: 'overview' });
+  };
 
   // Synchronize active application when route changes to application-detail
   useEffect(() => {
+    if (!currentUser) return;
     if (route.view === 'application-detail' && route.appIdentifier) {
       const identifier = route.appIdentifier.trim().toLowerCase();
 
-      // If activeApp already matches route.appIdentifier, keep it and clear any loading error
       if (
         activeApp &&
         (activeApp.name.toLowerCase() === identifier ||
@@ -180,7 +278,6 @@ export const App: React.FC = () => {
         setActiveApp(found);
         setAppLoadingError(null);
       } else if (!loading) {
-        // Fetch from API directly in case of direct URL or page refresh
         api.getApplicationDetails(route.appIdentifier)
           .then((res) => {
             setActiveApp(res.application);
@@ -208,7 +305,7 @@ export const App: React.FC = () => {
       setActiveApp(null);
       setAppLoadingError(null);
     }
-  }, [route.view, route.appIdentifier, applications, loading, activeApp]);
+  }, [route.view, route.appIdentifier, applications, loading, activeApp, currentUser]);
 
   // Navigation handlers
   const handleSelectTab = (tab: NavigationTab) => {
@@ -274,6 +371,34 @@ export const App: React.FC = () => {
     return 'applications';
   }, [route.view]);
 
+  // If unauthenticated, render public authentication view
+  if (!currentUser) {
+    return (
+      <div className="min-h-screen bg-[#09090b] text-[#f4f4f5] flex flex-col w-full">
+        <TopNav
+          currentUser={null}
+          onLogout={handleLogout}
+          onNavigateToSignIn={() => navigateToRoute({ view: 'signin' })}
+          onNavigateToSignUp={() => navigateToRoute({ view: 'signup' })}
+          onNavigateToApp={() => {}}
+        />
+        <main className="flex-1 flex items-center justify-center p-4">
+          {route.view === 'signup' ? (
+            <SignUpPage
+              onSuccess={handleAuthSuccess}
+              onNavigateToSignIn={() => navigateToRoute({ view: 'signin' })}
+            />
+          ) : (
+            <SignInPage
+              onSuccess={handleAuthSuccess}
+              onNavigateToSignUp={() => navigateToRoute({ view: 'signup' })}
+            />
+          )}
+        </main>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-[#09090b] text-[#f4f4f5] flex w-full">
       {/* Primary Sidebar (Requirement 1: Overview, Applications, Activity, Settings) */}
@@ -285,7 +410,7 @@ export const App: React.FC = () => {
         applicationsCount={applications.length}
       />
 
-      {/* Main Workspace Area (available viewport width - sidebar width) */}
+      {/* Main Workspace Area */}
       <div className="flex-1 flex flex-col min-w-0 w-full md:w-[calc(100%-15rem)]">
         {/* Top Navigation Bar */}
         <TopNav
@@ -293,6 +418,10 @@ export const App: React.FC = () => {
           onNavigateToCreate={() => navigateToRoute({ view: 'create-application' })}
           onNavigateToApp={(appName, tab) => handleSelectApplication(appName, (tab as AppDetailTab) || 'overview')}
           overviewData={overviewData}
+          currentUser={currentUser}
+          onLogout={handleLogout}
+          onNavigateToSignIn={() => navigateToRoute({ view: 'signin' })}
+          onNavigateToSignUp={() => navigateToRoute({ view: 'signup' })}
         />
 
         {/* Global Action Toast Banner */}
@@ -340,7 +469,7 @@ export const App: React.FC = () => {
             />
           )}
 
-          {/* 4. Dedicated Application Detail Page (Requirement 2 & 3) */}
+          {/* 4. Dedicated Application Detail Page */}
           {route.view === 'application-detail' && (
             <>
               {activeApp ? (

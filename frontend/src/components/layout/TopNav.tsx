@@ -16,10 +16,14 @@ import { OverviewData, RemediationEvent, User } from '../../types';
 import { api, getStoredUser, setStoredUser } from '../../services/api';
 
 interface TopNavProps {
-  onToggleSidebar: () => void;
-  onNavigateToCreate: () => void;
+  onToggleSidebar?: () => void;
+  onNavigateToCreate?: () => void;
   onNavigateToApp: (appName: string, tab?: string) => void;
   overviewData?: OverviewData | null;
+  currentUser: User | null;
+  onLogout: () => void;
+  onNavigateToSignIn: () => void;
+  onNavigateToSignUp: () => void;
 }
 
 const formatRelativeTime = (isoString?: string): string => {
@@ -40,11 +44,14 @@ export const TopNav: React.FC<TopNavProps> = ({
   onToggleSidebar,
   onNavigateToCreate,
   onNavigateToApp,
-  overviewData
+  overviewData,
+  currentUser,
+  onLogout,
+  onNavigateToSignIn,
+  onNavigateToSignUp
 }) => {
   const [showNotifications, setShowNotifications] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
-  const [currentUser, setCurrentUser] = useState<User>(getStoredUser());
   const [searchQuery, setSearchQuery] = useState('');
   const [remediationEvents, setRemediationEvents] = useState<RemediationEvent[]>([]);
   const [applicationsList, setApplicationsList] = useState<{ id: number; name: string }[]>([]);
@@ -53,13 +60,11 @@ export const TopNav: React.FC<TopNavProps> = ({
   const userMenuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    // Refresh authoritative current user info from backend
-    api.getCurrentUser()
-      .then((u) => {
-        setCurrentUser(u);
-        setStoredUser(u);
-      })
-      .catch(() => {});
+    if (!currentUser) {
+      setApplicationsList([]);
+      setRemediationEvents([]);
+      return;
+    }
 
     api.getApplications()
       .then((apps) => setApplicationsList(apps.map((a) => ({ id: a.id, name: a.name }))))
@@ -68,7 +73,7 @@ export const TopNav: React.FC<TopNavProps> = ({
     api.listRemediationEvents()
       .then(setRemediationEvents)
       .catch(() => setRemediationEvents([]));
-  }, []);
+  }, [currentUser]);
 
   // Outside click & Escape listeners for popovers
   useEffect(() => {
@@ -119,7 +124,7 @@ export const TopNav: React.FC<TopNavProps> = ({
   const handleWorkspaceChange = async (wsId: number) => {
     try {
       const updated = await api.switchWorkspace(wsId);
-      setCurrentUser(updated);
+      setStoredUser(updated);
       setShowUserMenu(false);
       window.location.reload();
     } catch (err) {
@@ -150,7 +155,42 @@ export const TopNav: React.FC<TopNavProps> = ({
     onNavigateToApp(appName, tab);
   };
 
-  const activeWorkspaceName = currentUser.active_workspace?.slug || 'default-workspace';
+  const activeWorkspaceName = currentUser?.active_workspace?.slug || 'default-workspace';
+
+  if (!currentUser) {
+    return (
+      <header className="h-14 border-b border-[#27272a] bg-[#0c0c0e] px-4 flex items-center justify-between sticky top-0 z-30 min-w-0 w-full">
+        <div className="flex items-center gap-2">
+          <div className="w-7 h-7 rounded bg-blue-600/20 border border-blue-500/40 flex items-center justify-center text-blue-400 font-mono font-bold text-xs">
+            DF
+          </div>
+          <span className="font-semibold text-sm tracking-tight text-white font-mono">DevForge</span>
+          <span className="text-[10px] font-mono px-1.5 py-0.5 rounded border border-zinc-800 bg-zinc-900 text-zinc-400">
+            Console
+          </span>
+        </div>
+
+        <div className="flex items-center gap-2 sm:gap-3">
+          <button
+            id="top-nav-signin-btn"
+            data-testid="top-nav-signin-btn"
+            onClick={onNavigateToSignIn}
+            className="px-3 py-1.5 rounded text-xs font-mono text-zinc-300 hover:text-white hover:bg-zinc-800 transition cursor-pointer"
+          >
+            Sign In
+          </button>
+          <button
+            id="top-nav-signup-btn"
+            data-testid="top-nav-signup-btn"
+            onClick={onNavigateToSignUp}
+            className="px-3.5 py-1.5 rounded text-xs font-mono bg-blue-600 hover:bg-blue-500 text-white font-medium transition cursor-pointer shadow-sm"
+          >
+            Sign Up
+          </button>
+        </div>
+      </header>
+    );
+  }
 
   return (
     <header className="h-14 border-b border-[#27272a] bg-[#0c0c0e] px-4 flex items-center justify-between sticky top-0 z-30 min-w-0 w-full">
@@ -508,22 +548,8 @@ export const TopNav: React.FC<TopNavProps> = ({
                   id="user-logout-button"
                   data-testid="user-logout-button"
                   onClick={async () => {
-                    await api.logout();
-                    const viewer: User = {
-                      id: 4,
-                      username: 'viewer',
-                      email: 'viewer@devforge.internal',
-                      display_name: 'Viewer',
-                      role: 'VIEWER',
-                      is_active: true,
-                      status: 'active',
-                      permissions: ['view:all'],
-                      workspaces: [{ id: 1, name: 'Default Workspace', slug: 'default-workspace', role: 'VIEWER' }],
-                      active_workspace: { id: 1, name: 'Default Workspace', slug: 'default-workspace', role: 'VIEWER' }
-                    };
-                    setStoredUser(viewer);
-                    setCurrentUser(viewer);
                     setShowUserMenu(false);
+                    await onLogout();
                   }}
                   className="w-full text-left px-2.5 py-1.5 rounded text-rose-400 hover:bg-rose-950/30 hover:text-rose-300 transition text-[11px] cursor-pointer"
                 >

@@ -48,8 +48,8 @@ export const SettingsPage: React.FC = () => {
   const [submittingMember, setSubmittingMember] = useState(false);
 
   const activeWsId = getActiveWorkspaceId();
-  const sessionToken = getAuthToken() || `df_jwt_session_${currentUser.username}_active`;
-  const isAdmin = currentUser.role === 'ADMIN';
+  const sessionToken = getAuthToken() || (currentUser ? `df_jwt_session_${currentUser.username}_active` : '');
+  const isAdmin = currentUser?.role === 'ADMIN';
 
   const copyToken = () => {
     navigator.clipboard?.writeText(sessionToken);
@@ -144,6 +144,14 @@ export const SettingsPage: React.FC = () => {
       setActionError(err.message || 'Failed to disable member.');
     }
   };
+
+  if (!currentUser) {
+    return (
+      <div className="p-8 text-center text-xs font-mono text-zinc-400">
+        Authentication required to access platform settings.
+      </div>
+    );
+  }
 
   return (
     <div className="p-4 sm:p-6 max-w-5xl mx-auto space-y-6 w-full min-w-0">

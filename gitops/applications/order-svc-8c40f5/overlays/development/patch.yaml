@@ -1,0 +1,13 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: devforge-order-svc-8c40f5
+spec:
+  replicas: 2
+  template:
+    spec:
+      containers:
+      - name: order-svc-8c40f5
+        env:
+        - name: LOG_LEVEL
+          value: DEBUG
