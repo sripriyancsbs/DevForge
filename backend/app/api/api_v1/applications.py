@@ -2,7 +2,7 @@ import logging
 import re
 from datetime import datetime, timezone
 from typing import List, Optional
-from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, status, Header
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
@@ -12,6 +12,8 @@ from app.models.deployment import Deployment
 from app.models.service_health import ServiceHealth
 from app.models.activity import Activity
 from app.models.provisioning_job import ProvisioningJob
+from app.models.workspace import Workspace
+from app.models.workspace_member import WorkspaceMember
 from app.schemas.application import (
     ApplicationCreate,
     ApplicationUpdate,
@@ -31,7 +33,7 @@ from app.services.image import image_service
 from app.schemas.remediation import ApplicationRemediationOverview, RemediationPolicyResponse
 from app.models.remediation import RemediationEvent, RemediationExecution
 from app.services.remediation import policy_service
-from app.core.auth import require_role
+from app.core.auth import require_role, get_optional_user, verify_application_workspace_access
 from app.models.user import User
 from sqlalchemy import desc
 
@@ -49,9 +51,35 @@ def list_applications(
     search: Optional[str] = Query(None, max_length=100),
     status_filter: Optional[str] = Query(None, alias="status", max_length=30),
     environment: Optional[str] = Query(None, max_length=50),
+    ws_id: Optional[str] = Header(None, alias="X-Workspace-Id"),
+    ws_slug: Optional[str] = Header(None, alias="X-Workspace-Slug"),
+    current_user: Optional[User] = Depends(get_optional_user),
     db: Session = Depends(get_db)
 ):
     query = db.query(Application)
+
+    if current_user:
+        user_ws_ids = [
+            m.workspace_id for m in db.query(WorkspaceMember.workspace_id).filter(
+                WorkspaceMember.user_id == current_user.id,
+                WorkspaceMember.status == "active"
+            ).all()
+        ]
+        
+        target_ws_id = None
+        if ws_id and ws_id.isdigit():
+            target_ws_id = int(ws_id)
+        elif ws_slug:
+            ws = db.query(Workspace).filter(Workspace.slug == ws_slug.strip()).first()
+            if ws:
+                target_ws_id = ws.id
+
+        if target_ws_id is not None:
+            if target_ws_id not in user_ws_ids:
+                return []
+            query = query.filter(Application.workspace_id == target_ws_id)
+        else:
+            query = query.filter(Application.workspace_id.in_(user_ws_ids))
 
     if search:
         search_fmt = f"%{search.lower()}%"
@@ -73,7 +101,11 @@ def list_applications(
 
 
 @router.get("/{app_id_or_slug}")
-def get_application_details(app_id_or_slug: str, db: Session = Depends(get_db)):
+def get_application_details(
+    app_id_or_slug: str,
+    current_user: Optional[User] = Depends(get_optional_user),
+    db: Session = Depends(get_db)
+):
     if app_id_or_slug.isdigit():
         app = db.query(Application).filter(Application.id == int(app_id_or_slug)).first()
     else:
@@ -84,6 +116,9 @@ def get_application_details(app_id_or_slug: str, db: Session = Depends(get_db)):
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Application '{app_id_or_slug}' not found."
         )
+
+    if current_user:
+        verify_application_workspace_access(app, current_user, db)
 
     deployments = (
         db.query(Deployment)
@@ -130,19 +165,48 @@ def get_application_manifest(app_id_or_slug: str, db: Session = Depends(get_db))
 def create_application(
     payload: ApplicationCreate,
     sync: bool = Query(False, description="Execute synchronously (useful for automated testing)"),
+    ws_id: Optional[str] = Header(None, alias="X-Workspace-Id"),
+    ws_slug: Optional[str] = Header(None, alias="X-Workspace-Slug"),
     db: Session = Depends(get_db),
     current_user: User = Depends(require_role(["DEVELOPER", "OPERATOR", "ADMIN"]))
 ):
     """
-    DevForge Provisioning Execution Model:
+    DevForge Provisioning Execution Model with Workspace Scoping:
     1. Validate request (name uniqueness, slug uniqueness, template validation, runtime compatibility)
-    2. Register application record in PostgreSQL with status='pending', provisioning_status='PENDING'
-    3. Create persistent ProvisioningJob record in PostgreSQL
-    4. Commit database transaction immediately
+    2. Resolve target workspace and verify user is DEVELOPER/OPERATOR/ADMIN in that workspace
+    3. Register application record in PostgreSQL with status='pending', provisioning_status='PENDING'
+    4. Create persistent ProvisioningJob record in PostgreSQL
     5. Return 201 immediately with job_id and PENDING status.
-       The background Provisioning Worker executes the job asynchronously.
-       (If sync=True, executes provisioning job synchronously).
     """
+    # 0. Resolve target workspace
+    target_workspace = None
+    if ws_id and ws_id.isdigit():
+        target_workspace = db.query(Workspace).filter(Workspace.id == int(ws_id)).first()
+    elif ws_slug:
+        target_workspace = db.query(Workspace).filter(Workspace.slug == ws_slug.strip()).first()
+    
+    if not target_workspace:
+        membership = db.query(WorkspaceMember).filter(
+            WorkspaceMember.user_id == current_user.id,
+            WorkspaceMember.status == "active"
+        ).first()
+        target_workspace = membership.workspace if membership else db.query(Workspace).filter(Workspace.slug == "default-workspace").first()
+
+    if not target_workspace:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Target workspace not found.")
+
+    # Check caller has permission in that workspace
+    member = db.query(WorkspaceMember).filter(
+        WorkspaceMember.workspace_id == target_workspace.id,
+        WorkspaceMember.user_id == current_user.id,
+        WorkspaceMember.status == "active"
+    ).first()
+    if not member or member.role.upper() not in ["DEVELOPER", "OPERATOR", "ADMIN"]:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=f"Forbidden: You do not have permission to create applications in workspace '{target_workspace.slug}'."
+        )
+
     # 1. Uniqueness check on name in database
     existing_name = db.query(Application).filter(Application.name == payload.name).first()
     if existing_name:
@@ -160,7 +224,9 @@ def create_application(
         )
 
     # 2. Resolve template and defaults
-    template_id = payload.template or "python-fastapi"
+    template_id = payload.template_id or payload.template or "python-fastapi"
+    template_version = getattr(payload, "template_version", None) or "1.0.0"
+
     try:
         template_service.validate_template(template_id)
     except Exception as e:
@@ -187,12 +253,15 @@ def create_application(
 
     # 3. Create Application record in PostgreSQL
     new_app = Application(
+        workspace_id=target_workspace.id,
         name=payload.name,
         slug=slug,
         description=payload.description or f"Self-serviced service provisioned via DevForge IDP.",
         team=payload.team or "Platform Engineering",
         runtime=runtime,
         template=template_id,
+        template_id=template_id,
+        template_version=template_version,
         repository_url=repo_url,
         repository_owner=repo_owner,
         repository_name=repo_name,
@@ -264,6 +333,8 @@ def delete_application(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Application with ID '{app_id}' not found."
         )
+
+    verify_application_workspace_access(app, current_user, db, required_roles=["ADMIN", "OPERATOR"])
 
     app_name = app.name
     db.delete(app)

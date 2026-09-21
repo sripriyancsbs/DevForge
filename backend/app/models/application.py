@@ -1,5 +1,5 @@
 from datetime import datetime, timezone
-from sqlalchemy import Column, Integer, String, DateTime, Text, Index
+from sqlalchemy import Column, Integer, String, DateTime, Text, Index, ForeignKey
 from sqlalchemy.orm import relationship
 from app.db.session import Base
 
@@ -10,6 +10,7 @@ class Application(Base):
     __tablename__ = "applications"
 
     id = Column(Integer, primary_key=True, index=True)
+    workspace_id = Column(Integer, ForeignKey("workspaces.id", ondelete="SET NULL"), nullable=True, index=True)
     name = Column(String(100), nullable=False, unique=True, index=True)
     slug = Column(String(120), nullable=False, unique=True, index=True)
     description = Column(Text, nullable=True)
@@ -26,6 +27,8 @@ class Application(Base):
     port = Column(Integer, nullable=False, default=8000)
     replicas = Column(Integer, nullable=False, default=2)
     template = Column(String(100), nullable=True, index=True)
+    template_id = Column(String(100), nullable=True, index=True)
+    template_version = Column(String(50), nullable=False, default="1.0.0", index=True)
     database_type = Column(String(50), nullable=False, default="none")
     deployment_strategy = Column(String(50), nullable=False, default="rolling")
     provisioning_status = Column(String(30), nullable=False, default="READY", index=True)
@@ -88,6 +91,7 @@ class Application(Base):
         cascade="all, delete-orphan",
         order_by="desc(RemediationEvent.created_at)"
     )
+    workspace = relationship("Workspace", back_populates="applications")
 
     __table_args__ = (
         Index("ix_applications_status_env", "status", "environment"),

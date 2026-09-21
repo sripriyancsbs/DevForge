@@ -9,7 +9,21 @@ class WorkflowGenerator:
     tailored to each application starter template with automated GHCR image publishing.
     """
 
-    SUPPORTED_TEMPLATES = {"python-fastapi", "react-vite", "go-microservice", "node-service"}
+    SUPPORTED_TEMPLATES = {
+        "python-fastapi", "react-vite", "go-microservice", "node-service",
+        "node-express", "go-gin"
+    }
+
+    def generate_workflow(
+        self,
+        app_name: str,
+        runtime: str = "python",
+        template: str = "python-fastapi",
+        port: int = 8000,
+        **kwargs
+    ) -> str:
+        """Alias for generate_workflow_yaml for backward and cross-service compatibility."""
+        return self.generate_workflow_yaml(template_id=template, app_name=app_name, port=port)
 
     def generate_workflow_yaml(
         self,
@@ -31,9 +45,9 @@ class WorkflowGenerator:
             return self._generate_python_fastapi_workflow(app_name)
         elif template_clean == "react-vite":
             return self._generate_react_vite_workflow(app_name)
-        elif template_clean == "node-service":
+        elif template_clean in {"node-service", "node-express"}:
             return self._generate_node_service_workflow(app_name)
-        elif template_clean == "go-microservice":
+        elif template_clean in {"go-microservice", "go-gin"}:
             return self._generate_go_microservice_workflow(app_name)
         else:
             raise CIWorkflowGenerationError(f"Unhandled template: {template_id}")

@@ -23,6 +23,8 @@ from app.api.api_v1 import (
     gitops,
     remediation,
     auth,
+    templates,
+    workspaces,
 )
 
 logging.basicConfig(level=logging.INFO)
@@ -212,6 +214,8 @@ app.include_router(ansible.router, prefix=f"{settings.API_V1_STR}/ansible", tags
 app.include_router(gitops.router, prefix=settings.API_V1_STR, tags=["gitops"])
 app.include_router(remediation.router, prefix=f"{settings.API_V1_STR}/remediation", tags=["remediation"])
 app.include_router(remediation.router, prefix=settings.API_V1_STR, tags=["remediation-alias"])
+app.include_router(templates.router, prefix=f"{settings.API_V1_STR}/templates", tags=["templates"])
+app.include_router(workspaces.router, prefix=f"{settings.API_V1_STR}/workspaces", tags=["workspaces"])
 
 if __name__ == "__main__":
     import uvicorn

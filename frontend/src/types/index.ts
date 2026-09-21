@@ -4,12 +4,15 @@ export type ProvisioningState = 'PENDING' | 'PROVISIONING' | 'READY' | 'FAILED';
 
 export interface Application {
   id: number;
+  workspace_id?: number | null;
   name: string;
   slug: string;
   description?: string;
   team: string;
   runtime: string;
   template?: string;
+  template_id?: string;
+  template_version?: string;
   repository_url: string;
   repository_owner?: string;
   repository_name?: string;
@@ -645,10 +648,15 @@ export interface User {
   id: number;
   username: string;
   email: string;
+  display_name?: string;
   role: Role;
   is_active: boolean;
+  status?: string;
   created_at?: string;
+  last_login_at?: string;
   permissions?: string[];
+  workspaces?: UserWorkspaceInfo[];
+  active_workspace?: UserWorkspaceInfo;
 }
 
 export interface TokenResponse {
@@ -656,4 +664,78 @@ export interface TokenResponse {
   token_type: string;
   expires_in: number;
   user: User;
+}
+
+// Phase 14 Real User, Workspace & RBAC Types
+export interface UserWorkspaceInfo {
+  id: number;
+  name: string;
+  slug: string;
+  role: string;
+}
+
+export interface Workspace {
+  id: number;
+  name: string;
+  slug: string;
+  description?: string | null;
+  status: string;
+  created_at?: string;
+  updated_at?: string;
+  current_user_role?: string;
+  member_count?: number;
+  application_count?: number;
+}
+
+export interface WorkspaceMember {
+  id: number;
+  workspace_id: number;
+  user_id: number;
+  username?: string;
+  email?: string;
+  display_name?: string;
+  role: string;
+  status: string;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface AddWorkspaceMemberPayload {
+  email: string;
+  role: string;
+  username?: string;
+  display_name?: string;
+}
+
+// Phase 13 Template System Types
+export interface ApplicationTemplate {
+  id?: number | string;
+  template_id: string;
+  name: string;
+  description?: string;
+  runtime: string;
+  framework: string;
+  version: string;
+  supported_environments: string[];
+  generated_project_structure: string[];
+  required_variables: string[];
+  optional_variables: Record<string, any>;
+  default_values: Record<string, any>;
+  validation_rules: Record<string, any>;
+  is_enabled: boolean;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface TemplatePreviewResponse {
+  template_id: string;
+  template_name: string;
+  template_version: string;
+  runtime: string;
+  framework: string;
+  application_name: string;
+  environment: string;
+  files: string[];
+  manifest_preview: string;
+  key_generated_components?: string[];
 }

@@ -4,13 +4,18 @@ from typing import Any, Dict, List, Optional
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 ALLOWED_ENVIRONMENTS = {"production", "staging", "development", "preview"}
-ALLOWED_TEMPLATES = {"python-fastapi", "react-vite", "go-microservice", "node-service"}
+ALLOWED_TEMPLATES = {
+    "python-fastapi", "react-vite", "go-microservice", "node-service",
+    "node-express", "go-gin"
+}
 ALLOWED_RUNTIMES = {"python", "node", "go", "react"}
 ALLOWED_DATABASES = {"none", "postgresql", "mysql", "redis"}
 ALLOWED_STRATEGIES = {"rolling", "recreate", "canary"}
 
 TEMPLATE_DEFAULTS = {
     "python-fastapi": {"runtime": "python", "runtime_display": "Python 3.12 (FastAPI)", "port": 8000},
+    "node-express": {"runtime": "node", "runtime_display": "Node.js 20 (Express)", "port": 3000},
+    "go-gin": {"runtime": "go", "runtime_display": "Go 1.22 (Gin)", "port": 8080},
     "react-vite": {"runtime": "react", "runtime_display": "Node.js 20 (Vite)", "port": 3000},
     "go-microservice": {"runtime": "go", "runtime_display": "Go 1.22", "port": 8080},
     "node-service": {"runtime": "node", "runtime_display": "Node.js 20", "port": 3000},
@@ -24,6 +29,8 @@ class ApplicationBase(BaseModel):
     team: str = Field(default="Platform Engineering", min_length=2, max_length=100)
     runtime: str = Field(default="Python 3.12 (FastAPI)", min_length=2, max_length=100)
     template: Optional[str] = Field(default="python-fastapi", max_length=100)
+    template_id: Optional[str] = Field(default="python-fastapi", max_length=100)
+    template_version: Optional[str] = Field(default="1.0.0", max_length=50)
     repository_url: Optional[str] = Field(None, max_length=255)
     repository_owner: Optional[str] = Field(None, max_length=100)
     repository_name: Optional[str] = Field(None, max_length=100)
@@ -77,6 +84,9 @@ class ApplicationCreate(BaseModel):
     team: Optional[str] = Field(default="Platform Engineering", min_length=2, max_length=100)
     runtime: Optional[str] = None
     template: Optional[str] = Field(default="python-fastapi")
+    template_id: Optional[str] = None
+    template_version: Optional[str] = Field(default="1.0.0")
+    variables: Optional[Dict[str, Any]] = None
     environment: str = Field(default="development")
     database_type: str = Field(default="none")
     deployment_strategy: str = Field(default="rolling")

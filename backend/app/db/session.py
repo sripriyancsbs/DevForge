@@ -291,7 +291,66 @@ def run_phase2_migrations():
         );""",
         "CREATE INDEX IF NOT EXISTS ix_users_username ON users (username);",
         "CREATE INDEX IF NOT EXISTS ix_users_email ON users (email);",
-        "CREATE INDEX IF NOT EXISTS ix_users_role ON users (role);"
+        "CREATE INDEX IF NOT EXISTS ix_users_role ON users (role);",
+
+        # Phase 13 Migrations: Reusable Application Templates & Multi-Stack Scaffolding
+        """CREATE TABLE IF NOT EXISTS templates (
+            id SERIAL PRIMARY KEY,
+            template_id VARCHAR(100) NOT NULL,
+            name VARCHAR(100) NOT NULL,
+            description TEXT,
+            runtime VARCHAR(50) NOT NULL,
+            framework VARCHAR(50) NOT NULL,
+            version VARCHAR(50) DEFAULT '1.0.0' NOT NULL,
+            supported_environments TEXT DEFAULT '["development", "staging", "production"]' NOT NULL,
+            generated_project_structure TEXT DEFAULT '[]' NOT NULL,
+            required_variables TEXT DEFAULT '["application_name", "environment", "port"]' NOT NULL,
+            optional_variables TEXT DEFAULT '{}' NOT NULL,
+            default_values TEXT DEFAULT '{}' NOT NULL,
+            validation_rules TEXT DEFAULT '{}' NOT NULL,
+            is_enabled BOOLEAN DEFAULT TRUE NOT NULL,
+            created_at TIMESTAMPTZ DEFAULT NOW(),
+            updated_at TIMESTAMPTZ DEFAULT NOW(),
+            CONSTRAINT uq_templates_id_version UNIQUE (template_id, version)
+        );""",
+        "CREATE INDEX IF NOT EXISTS ix_templates_id ON templates (template_id);",
+        "CREATE INDEX IF NOT EXISTS ix_templates_lookup ON templates (template_id, version, is_enabled);",
+        "ALTER TABLE applications ADD COLUMN IF NOT EXISTS template_id VARCHAR(100);",
+        "ALTER TABLE applications ADD COLUMN IF NOT EXISTS template_version VARCHAR(50) DEFAULT '1.0.0' NOT NULL;",
+        "CREATE INDEX IF NOT EXISTS ix_applications_template_id ON applications (template_id);",
+        "CREATE INDEX IF NOT EXISTS ix_applications_template_version ON applications (template_version);",
+        "ALTER TABLE provisioning_jobs ADD COLUMN IF NOT EXISTS template_version VARCHAR(50) DEFAULT '1.0.0' NOT NULL;",
+
+        # Phase 14 Migrations: Real User, Workspace & RBAC Management
+        "ALTER TABLE users ADD COLUMN IF NOT EXISTS display_name VARCHAR(100);",
+        "ALTER TABLE users ADD COLUMN IF NOT EXISTS status VARCHAR(20) DEFAULT 'active' NOT NULL;",
+        "ALTER TABLE users ADD COLUMN IF NOT EXISTS last_login_at TIMESTAMPTZ;",
+        """CREATE TABLE IF NOT EXISTS workspaces (
+            id SERIAL PRIMARY KEY,
+            name VARCHAR(100) NOT NULL,
+            slug VARCHAR(100) UNIQUE NOT NULL,
+            description TEXT,
+            status VARCHAR(20) DEFAULT 'active' NOT NULL,
+            created_at TIMESTAMPTZ DEFAULT NOW() NOT NULL,
+            updated_at TIMESTAMPTZ DEFAULT NOW() NOT NULL
+        );""",
+        "CREATE INDEX IF NOT EXISTS ix_workspaces_slug ON workspaces (slug);",
+        "CREATE INDEX IF NOT EXISTS ix_workspaces_status ON workspaces (status);",
+        """CREATE TABLE IF NOT EXISTS workspace_members (
+            id SERIAL PRIMARY KEY,
+            workspace_id INTEGER NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+            user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            role VARCHAR(20) DEFAULT 'VIEWER' NOT NULL,
+            status VARCHAR(20) DEFAULT 'active' NOT NULL,
+            created_at TIMESTAMPTZ DEFAULT NOW() NOT NULL,
+            updated_at TIMESTAMPTZ DEFAULT NOW() NOT NULL,
+            CONSTRAINT uq_workspace_user UNIQUE (workspace_id, user_id)
+        );""",
+        "CREATE INDEX IF NOT EXISTS ix_workspace_members_workspace_id ON workspace_members (workspace_id);",
+        "CREATE INDEX IF NOT EXISTS ix_workspace_members_user_id ON workspace_members (user_id);",
+        "CREATE INDEX IF NOT EXISTS ix_workspace_members_role ON workspace_members (role);",
+        "ALTER TABLE applications ADD COLUMN IF NOT EXISTS workspace_id INTEGER REFERENCES workspaces(id) ON DELETE SET NULL;",
+        "CREATE INDEX IF NOT EXISTS ix_applications_workspace_id ON applications (workspace_id);"
     ]
     try:
         with engine.begin() as conn:
@@ -326,7 +385,118 @@ def run_phase2_migrations():
                             "description": p_desc,
                         }
                     )
-        logger.info("DevForge PostgreSQL schema migrations (Phase 2-12) applied successfully.")
+
+            # Phase 13: Seed baseline application templates if empty
+            tpl_count = conn.execute(text("SELECT count(*) FROM templates")).scalar()
+            if tpl_count == 0:
+                import json
+                baseline_templates = [
+                    (
+                        "python-fastapi",
+                        "Python FastAPI API",
+                        "High-performance asynchronous REST microservice with automatic OpenAPI schema, Pydantic validation, and health probe endpoints.",
+                        "python",
+                        "FastAPI",
+                        "1.0.0",
+                        json.dumps(["development", "staging", "production"]),
+                        json.dumps(["main.py", "requirements.txt", "Dockerfile", ".dockerignore", "README.md", "devforge.yaml", ".github/workflows/ci.yml", "tests/test_main.py"]),
+                        json.dumps(["application_name", "environment", "port"]),
+                        json.dumps({"description": "string", "team": "string", "database_type": "string", "replicas": "number"}),
+                        json.dumps({"port": 8000, "replicas": 2, "database_type": "postgresql", "deployment_strategy": "rolling"}),
+                        json.dumps({"name_pattern": "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$", "port_range": [1, 65535]}),
+                        True
+                    ),
+                    (
+                        "node-express",
+                        "Node.js Express API",
+                        "Event-driven Node.js REST API service built with Express, structured routing, test suite, and optimized containerfile.",
+                        "node",
+                        "Express",
+                        "1.0.0",
+                        json.dumps(["development", "staging", "production"]),
+                        json.dumps(["server.js", "package.json", "Dockerfile", ".dockerignore", "README.md", "devforge.yaml", ".github/workflows/ci.yml", "test.js"]),
+                        json.dumps(["application_name", "environment", "port"]),
+                        json.dumps({"description": "string", "team": "string", "database_type": "string", "replicas": "number"}),
+                        json.dumps({"port": 3000, "replicas": 2, "database_type": "none", "deployment_strategy": "rolling"}),
+                        json.dumps({"name_pattern": "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$", "port_range": [1, 65535]}),
+                        True
+                    ),
+                    (
+                        "go-gin",
+                        "Go Gin API",
+                        "Compiled, low-latency microservice powered by the Gin Gonic web framework with multi-stage minimal container build.",
+                        "go",
+                        "Gin",
+                        "1.0.0",
+                        json.dumps(["development", "staging", "production"]),
+                        json.dumps(["main.go", "go.mod", "Dockerfile", ".dockerignore", "README.md", "devforge.yaml", ".github/workflows/ci.yml", "main_test.go"]),
+                        json.dumps(["application_name", "environment", "port"]),
+                        json.dumps({"description": "string", "team": "string", "database_type": "string", "replicas": "number"}),
+                        json.dumps({"port": 8080, "replicas": 2, "database_type": "none", "deployment_strategy": "rolling"}),
+                        json.dumps({"name_pattern": "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$", "port_range": [1, 65535]}),
+                        True
+                    ),
+                ]
+                for tid, tname, tdesc, truntime, tfw, tver, tenvs, tstruct, treq, topt, tdef, trules, tenabled in baseline_templates:
+                    conn.execute(
+                        text("""INSERT INTO templates 
+                        (template_id, name, description, runtime, framework, version, supported_environments, generated_project_structure, required_variables, optional_variables, default_values, validation_rules, is_enabled, created_at, updated_at)
+                        VALUES (:tid, :tname, :tdesc, :truntime, :tfw, :tver, :tenvs, :tstruct, :treq, :topt, :tdef, :trules, :tenabled, NOW(), NOW())
+                        ON CONFLICT (template_id, version) DO NOTHING;"""),
+                        {
+                            "tid": tid,
+                            "tname": tname,
+                            "tdesc": tdesc,
+                            "truntime": truntime,
+                            "tfw": tfw,
+                            "tver": tver,
+                            "tenvs": tenvs,
+                            "tstruct": tstruct,
+                            "treq": treq,
+                            "topt": topt,
+                            "tdef": tdef,
+                            "trules": trules,
+                            "tenabled": tenabled,
+                        }
+                    )
+
+            # Phase 14: Seed default workspaces
+            ws_count = conn.execute(text("SELECT count(*) FROM workspaces")).scalar()
+            if ws_count == 0:
+                conn.execute(text("""INSERT INTO workspaces (name, slug, description, status, created_at, updated_at)
+                    VALUES 
+                    ('Default Workspace', 'default-workspace', 'Primary engineering workspace for core platform services', 'active', NOW(), NOW()),
+                    ('Staging Workspace', 'staging-workspace', 'Secondary isolated staging workspace for pre-release validation', 'active', NOW(), NOW())
+                    ON CONFLICT (slug) DO NOTHING;
+                """))
+
+            # Assign unassigned applications to default-workspace
+            conn.execute(text("""
+                UPDATE applications 
+                SET workspace_id = (SELECT id FROM workspaces WHERE slug = 'default-workspace' LIMIT 1)
+                WHERE workspace_id IS NULL;
+            """))
+
+            # Seed workspace memberships for baseline users
+            default_ws_id = conn.execute(text("SELECT id FROM workspaces WHERE slug = 'default-workspace' LIMIT 1")).scalar()
+            staging_ws_id = conn.execute(text("SELECT id FROM workspaces WHERE slug = 'staging-workspace' LIMIT 1")).scalar()
+            if default_ws_id:
+                users = conn.execute(text("SELECT id, username, role FROM users WHERE username IN ('admin', 'operator', 'developer', 'viewer')")).fetchall()
+                for uid, uname, urole in users:
+                    conn.execute(text("""
+                        INSERT INTO workspace_members (workspace_id, user_id, role, status, created_at, updated_at)
+                        VALUES (:ws_id, :u_id, :role, 'active', NOW(), NOW())
+                        ON CONFLICT (workspace_id, user_id) DO NOTHING;
+                    """), {"ws_id": default_ws_id, "u_id": uid, "role": urole or "VIEWER"})
+
+                    if staging_ws_id and uname in ("admin", "operator"):
+                        conn.execute(text("""
+                            INSERT INTO workspace_members (workspace_id, user_id, role, status, created_at, updated_at)
+                            VALUES (:ws_id, :u_id, :role, 'active', NOW(), NOW())
+                            ON CONFLICT (workspace_id, user_id) DO NOTHING;
+                        """), {"ws_id": staging_ws_id, "u_id": uid, "role": urole or "VIEWER"})
+
+        logger.info("DevForge PostgreSQL schema migrations (Phase 2-14) applied successfully.")
     except Exception as e:
         logger.warning(f"Note on migrations (table may not exist yet if fresh DB): {e}")
 

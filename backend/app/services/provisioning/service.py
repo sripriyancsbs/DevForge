@@ -14,6 +14,7 @@ from app.models.service_health import ServiceHealth
 from app.models.activity import Activity
 from app.schemas.application import ApplicationCreate
 from app.services.provisioning.template_service import template_service
+from app.services.provisioning.template_registry import template_registry
 from app.services.provisioning.project_generator import project_generator
 from app.services.github.repository_service import repository_service
 from app.services.github.github_client import scrub_credentials
@@ -38,11 +39,14 @@ class ProvisioningService:
     def create_job(self, db: Session, application: Application, payload: ApplicationCreate) -> ProvisioningJob:
         """Create and persist a new provisioning job in PENDING state."""
         template_id = payload.template or "python-fastapi"
+        template_version = getattr(payload, "template_version", None) or "1.0.0"
 
         snapshot = {
             "name": application.name,
             "runtime": application.runtime,
             "template": template_id,
+            "template_id": template_id,
+            "template_version": template_version,
             "environment": application.environment,
             "port": application.port,
             "replicas": application.replicas,
@@ -57,6 +61,7 @@ class ProvisioningService:
             application_id=application.id,
             status="PENDING",
             template=template_id,
+            template_version=template_version,
             current_step="VALIDATE_CONFIGURATION",
             attempt=1,
             max_attempts=3,
@@ -125,13 +130,42 @@ class ProvisioningService:
 
         snapshot = json.loads(job.payload_snapshot) if job.payload_snapshot else {}
         template_id = job.template
+        template_version = getattr(job, "template_version", "1.0.0") or "1.0.0"
 
         try:
             # STEP 1: VALIDATE_CONFIGURATION
             job.current_step = "VALIDATE_CONFIGURATION"
             db.commit()
+
+            # Phase 13 Template Registry variable validation
+            template_registry.validate_variables(
+                template_id=template_id,
+                version=template_version,
+                variables={"application_name": app.name, "port": app.port, "environment": app.environment},
+                db=db
+            )
             template_service.validate_template(template_id)
             template_service.validate_runtime_and_template(app.runtime, template_id)
+
+            db.add(Activity(
+                actor="devforge.worker",
+                action="template.selected",
+                target=f"{app.name} ({template_id}:{template_version})",
+                target_type="template",
+                status="completed",
+                details=f"Selected template '{template_id}' version '{template_version}' for {app.name}",
+                created_at=utcnow()
+            ))
+            db.add(Activity(
+                actor="devforge.worker",
+                action="template.validated",
+                target=f"{app.name} ({template_id})",
+                target_type="template",
+                status="completed",
+                details=f"Validated variables and schema for template '{template_id}'",
+                created_at=utcnow()
+            ))
+            db.commit()
 
             # STEP 2: PREPARE_WORKSPACE
             job.current_step = "PREPARE_WORKSPACE"
@@ -301,10 +335,23 @@ class ProvisioningService:
             # Update Application in database
             app.provisioning_status = "READY"
             app.status = "healthy"
+            app.template_id = template_id
+            app.template_version = template_version
             app.generated_path = gen_result.relative_path
             app.manifest_yaml = gen_result.manifest_yaml
             app.provisioning_error = None
             app.updated_at = now
+
+            db.add(Activity(
+                actor="devforge.worker",
+                action="application.created_from_template",
+                target=app.name,
+                target_type="application",
+                status="completed",
+                details=f"Successfully generated and initialized application '{app.name}' from template '{template_id}' (v{template_version})",
+                created_at=now
+            ))
+            db.commit()
 
             # Ensure initial deployment record exists
             existing_dep = db.query(Deployment).filter(Deployment.application_id == app.id).first()

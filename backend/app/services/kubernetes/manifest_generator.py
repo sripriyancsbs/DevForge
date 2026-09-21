@@ -12,15 +12,27 @@ TEMPLATE_METADATA = {
         "probe_initial_delay": 5,
         "probe_period": 10,
     },
+    "node-express": {
+        "port": 3000,
+        "health_path": "/healthz",
+        "probe_initial_delay": 5,
+        "probe_period": 10,
+    },
     "node-service": {
         "port": 3000,
         "health_path": "/healthz",
         "probe_initial_delay": 5,
         "probe_period": 10,
     },
+    "go-gin": {
+        "port": 8080,
+        "health_path": "/healthz",
+        "probe_initial_delay": 3,
+        "probe_period": 10,
+    },
     "go-microservice": {
         "port": 8080,
-        "health_path": "/health",
+        "health_path": "/healthz",
         "probe_initial_delay": 3,
         "probe_period": 10,
     },

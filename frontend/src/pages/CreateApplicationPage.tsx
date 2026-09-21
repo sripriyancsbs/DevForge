@@ -16,10 +16,16 @@ import {
   XCircle,
   RotateCw,
   GitBranch,
-  Github
+  Github,
+  Layers,
+  Code2,
+  Box,
+  Eye,
+  Sliders
 } from 'lucide-react';
 import { api } from '../services/api';
-import { Application, ApplicationProvisioningResponse, ProvisioningJob, ProvisioningJobStep } from '../types';
+import { Application, ApplicationProvisioningResponse, ProvisioningJob, ProvisioningJobStep, ApplicationTemplate, TemplatePreviewResponse } from '../types';
+import { SEED_TEMPLATES } from '../services/seedData';
 
 interface CreateApplicationPageProps {
   onBack: () => void;
@@ -35,27 +41,24 @@ export const CreateApplicationPage: React.FC<CreateApplicationPageProps> = ({
   const [stage, setStage] = useState<'wizard' | 'provisioning' | 'ready' | 'failed'>('wizard');
   const [step, setStep] = useState<1 | 2 | 3>(1);
   const [error, setError] = useState<string | null>(null);
+  const [validationErrors, setValidationErrors] = useState<string[]>([]);
   const [activeJobId, setActiveJobId] = useState<number | null>(null);
   const [currentJob, setCurrentJob] = useState<ProvisioningJob | null>(null);
   const [provisionResult, setProvisionResult] = useState<ApplicationProvisioningResponse | null>(null);
+
+  // Template Catalog State
+  const [templates, setTemplates] = useState<ApplicationTemplate[]>(SEED_TEMPLATES);
+  const [selectedTemplateId, setSelectedTemplateId] = useState<string>('python-fastapi');
+  const [previewTab, setPreviewTab] = useState<'preview' | 'manifest'>('preview');
+  const [serverPreview, setServerPreview] = useState<TemplatePreviewResponse | null>(null);
 
   // Form State
   const [name, setName] = useState('');
   const [team, setTeam] = useState('Platform Engineering');
   const [description, setDescription] = useState('');
   const [gitHubOwner, setGitHubOwner] = useState('sripriyancsbs');
-
-  useEffect(() => {
-    api.getGitHubStatus()
-      .then((res) => {
-        if (res && res.owner) setGitHubOwner(res.owner);
-      })
-      .catch(() => {});
-  }, []);
-  
-  // Runtime & Source
-  const [runtimeTemplate, setRuntimeTemplate] = useState('python-fastapi');
-  const [repoUrl, setRepoUrl] = useState(`https://github.com/${gitHubOwner}/`);
+  const [repoVisibility, setRepoVisibility] = useState<'private' | 'public'>('private');
+  const [repoUrl, setRepoUrl] = useState(`https://github.com/sripriyancsbs/`);
   const [branch, setBranch] = useState('main');
 
   // Environment & Sizing
@@ -64,60 +67,84 @@ export const CreateApplicationPage: React.FC<CreateApplicationPageProps> = ({
   const [replicas, setReplicas] = useState(2);
   const [databaseType, setDatabaseType] = useState('none');
   const [deploymentStrategy, setDeploymentStrategy] = useState('rolling');
-  const [resourceProfile, setResourceProfile] = useState<'standard' | 'micro' | 'high'>('standard');
+  const [envVarsText, setEnvVarsText] = useState('');
 
-  const templates = [
-    {
-      id: 'python-fastapi',
-      name: 'Python FastAPI',
-      runtimeStr: 'Python 3.12 (FastAPI)',
-      canonicalRuntime: 'python',
-      defaultPort: 8000,
-      desc: 'High-performance async microservice with automatic OpenAPI swagger docs and health probe',
-      tag: 'FastAPI'
-    },
-    {
-      id: 'react-vite',
-      name: 'React + Vite',
-      runtimeStr: 'Node.js 20 (Vite)',
-      canonicalRuntime: 'react',
-      defaultPort: 3000,
-      desc: 'Client-side SPA with TypeScript, Tailwind CSS, and optimized production build',
-      tag: 'Frontend'
-    },
-    {
-      id: 'go-microservice',
-      name: 'Go Microservice',
-      runtimeStr: 'Go 1.22',
-      canonicalRuntime: 'go',
-      defaultPort: 8080,
-      desc: 'Compiled lightweight binary with minimal memory footprint and fast boot time',
-      tag: 'Compiled'
-    },
-    {
-      id: 'node-service',
-      name: 'Node.js API',
-      runtimeStr: 'Node.js 20',
-      canonicalRuntime: 'node',
-      defaultPort: 3000,
-      desc: 'Event-driven Node.js REST backend service with lightweight container profile',
-      tag: 'Node'
-    }
-  ];
+  // Fetch templates and GitHub status on mount
+  useEffect(() => {
+    api.getGitHubStatus()
+      .then((res) => {
+        if (res && res.owner) setGitHubOwner(res.owner);
+      })
+      .catch(() => {});
 
-  const handleTemplateSelect = (t: typeof templates[0]) => {
-    setRuntimeTemplate(t.id);
-    setPort(t.defaultPort);
+    api.getTemplates()
+      .then((tpls) => {
+        if (tpls && tpls.length > 0) {
+          setTemplates(tpls);
+          const first = tpls[0];
+          setSelectedTemplateId(first.template_id);
+          setPort(first.default_values?.port || 8000);
+        }
+      })
+      .catch(() => {
+        setTemplates(SEED_TEMPLATES);
+      });
+  }, []);
+
+  const selectedTemplate = templates.find((t) => t.template_id === selectedTemplateId) || templates[0] || SEED_TEMPLATES[0];
+
+  const handleTemplateSelect = (tpl: ApplicationTemplate) => {
+    setSelectedTemplateId(tpl.template_id);
+    const defaultPort = tpl.default_values?.port || (tpl.runtime === 'go' ? 8080 : tpl.runtime === 'node' ? 3000 : 8000);
+    setPort(defaultPort);
     if (name) {
       setRepoUrl(`https://github.com/${gitHubOwner}/${name}`);
     }
   };
 
   const handleNameChange = (val: string) => {
-    const slugified = val.toLowerCase().replace(/[^a-z0-9-]/g, '-');
-    setName(slugified);
-    setRepoUrl(`https://github.com/${gitHubOwner}/${slugified}`);
+    const sanitized = val.toLowerCase().replace(/[^a-z0-9-]/g, '-');
+    setName(sanitized);
+    setRepoUrl(`https://github.com/${gitHubOwner}/${sanitized}`);
+    validateName(sanitized);
   };
+
+  const validateName = (val: string): boolean => {
+    const errs: string[] = [];
+    if (!val.trim()) {
+      errs.push('Application name is required.');
+    } else {
+      if (val.length < 2 || val.length > 63) {
+        errs.push('Application name must be between 2 and 63 characters.');
+      }
+      const rfc1123Regex = /^[a-z0-9]([-a-z0-9]*[a-z0-9])?$/;
+      if (!rfc1123Regex.test(val)) {
+        errs.push('Name must follow RFC 1123: lowercase letters, numbers, and hyphens only, and cannot start or end with a hyphen.');
+      }
+      if (val.includes('..') || val.includes('/') || val.includes('\\')) {
+        errs.push('Name contains forbidden path traversal characters.');
+      }
+    }
+    setValidationErrors(errs);
+    return errs.length === 0;
+  };
+
+  // Live Template Preview Loader
+  useEffect(() => {
+    if (!selectedTemplate) return;
+    const appName = name.trim() || 'example-app';
+    api.previewTemplate(selectedTemplate.template_id, {
+      application_name: appName,
+      environment,
+      variables: {
+        port,
+        replicas,
+        database_type: databaseType
+      }
+    })
+      .then(res => setServerPreview(res))
+      .catch(() => setServerPreview(null));
+  }, [selectedTemplateId, name, environment, port, replicas, databaseType]);
 
   const PROVISIONING_STEPS: { id: ProvisioningJobStep; title: string; desc: string }[] = [
     {
@@ -128,7 +155,7 @@ export const CreateApplicationPage: React.FC<CreateApplicationPageProps> = ({
     {
       id: 'GENERATE_PROJECT',
       title: 'Generate project',
-      desc: `Scaffold complete ${runtimeTemplate} source code, containerfile, and configuration`
+      desc: `Scaffold complete ${selectedTemplate?.name || 'starter'} source code, containerfile, and configuration`
     },
     {
       id: 'GENERATE_MANIFEST',
@@ -143,7 +170,7 @@ export const CreateApplicationPage: React.FC<CreateApplicationPageProps> = ({
     {
       id: 'VALIDATE_PROJECT',
       title: 'Validate project',
-      desc: 'Ensure generated files, runtime entrypoints, and manifest schemas are valid'
+      desc: 'Ensure generated files, runtime entrypoints, syntax, and zero unresolved variables'
     },
     {
       id: 'CREATING_REPOSITORY',
@@ -178,7 +205,6 @@ export const CreateApplicationPage: React.FC<CreateApplicationPageProps> = ({
     if (!currentJob) return 'pending';
     if (currentJob.status === 'READY') return 'completed';
 
-    // Normalize PREPARE_WORKSPACE
     let curStep = currentJob.current_step;
     if (curStep === 'PREPARE_WORKSPACE') {
       curStep = 'VALIDATE_CONFIGURATION';
@@ -269,30 +295,52 @@ export const CreateApplicationPage: React.FC<CreateApplicationPageProps> = ({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!name.trim()) {
-      setError('Application name is required.');
+
+    if (!validateName(name)) {
+      setError('Please resolve all validation errors before proceeding.');
       return;
     }
+
+    if (port < 1 || port > 65535) {
+      setError('Port must be between 1 and 65535.');
+      return;
+    }
+
     setError(null);
     setStage('provisioning');
     setCurrentJob(null);
 
+    // Parse env vars
+    const envVarsObj: Record<string, string> = {};
+    if (envVarsText.trim()) {
+      envVarsText.split('\n').forEach(line => {
+        const trimmed = line.trim();
+        if (trimmed && !trimmed.startsWith('#') && trimmed.includes('=')) {
+          const [k, ...v] = trimmed.split('=');
+          envVarsObj[k.trim()] = v.join('=').trim();
+        }
+      });
+    }
+
     try {
-      const selectedTpl = templates.find((t) => t.id === runtimeTemplate);
       const result = await onCreateApp({
         name,
-        description: description || `Self-serviced ${selectedTpl?.name} created via DevForge IDP.`,
+        description: description || `Self-serviced ${selectedTemplate.name} created via DevForge IDP.`,
         team,
-        runtime: selectedTpl?.canonicalRuntime || 'python',
-        template: runtimeTemplate,
+        runtime: selectedTemplate.runtime,
+        template: selectedTemplate.template_id,
+        template_id: selectedTemplate.template_id,
+        template_version: selectedTemplate.version,
         repository_url: repoUrl,
+        repository_visibility: repoVisibility,
         branch,
         environment,
         database_type: databaseType,
         deployment_strategy: deploymentStrategy,
         version: 'v1.0.0',
         port: Number(port),
-        replicas: Number(replicas)
+        replicas: Number(replicas),
+        env_vars: envVarsObj
       });
 
       if (result.provisioning_status === 'READY') {
@@ -320,7 +368,7 @@ export const CreateApplicationPage: React.FC<CreateApplicationPageProps> = ({
               <Loader2 className="w-5 h-5 text-emerald-400 animate-spin" />
               <div>
                 <h2 className="text-base font-semibold text-white font-mono">Provisioning Application: {name}</h2>
-                <p className="text-xs text-zinc-400">PostgreSQL worker queue executing background provisioning pipeline</p>
+                <p className="text-xs text-zinc-400">Template-driven provisioning pipeline scaffolding {selectedTemplate.name} v{selectedTemplate.version}</p>
               </div>
             </div>
             {currentJob && (
@@ -348,156 +396,82 @@ export const CreateApplicationPage: React.FC<CreateApplicationPageProps> = ({
                 <div key={s.id} className="flex items-start gap-3.5">
                   <div className="mt-0.5">
                     {isCompleted ? (
-                      <div className="w-5 h-5 rounded-full bg-emerald-500/20 border border-emerald-500 flex items-center justify-center text-emerald-400">
-                        <Check className="w-3 h-3 stroke-[3]" />
-                      </div>
-                    ) : isFailed ? (
-                      <div className="w-5 h-5 rounded-full bg-red-500/20 border border-red-500 flex items-center justify-center text-red-400">
-                        <XCircle className="w-3 h-3" />
+                      <div className="w-5 h-5 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center">
+                        <Check className="w-3.5 h-3.5" />
                       </div>
                     ) : isCurrent ? (
-                      <div className="w-5 h-5 rounded-full bg-zinc-800 border border-emerald-400 flex items-center justify-center">
-                        <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                      <div className="w-5 h-5 rounded-full bg-blue-500/20 text-blue-400 flex items-center justify-center">
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      </div>
+                    ) : isFailed ? (
+                      <div className="w-5 h-5 rounded-full bg-red-500/20 text-red-400 flex items-center justify-center">
+                        <XCircle className="w-3.5 h-3.5" />
                       </div>
                     ) : (
-                      <div className="w-5 h-5 rounded-full border border-zinc-700 bg-zinc-900/50" />
+                      <div className="w-5 h-5 rounded-full bg-zinc-800 text-zinc-500 flex items-center justify-center text-[10px] font-mono">
+                        •
+                      </div>
                     )}
                   </div>
                   <div>
-                    <div className={`text-xs font-semibold font-mono ${
-                      isCompleted ? 'text-zinc-200' : isCurrent ? 'text-white font-bold' : isFailed ? 'text-red-400' : 'text-zinc-500'
-                    }`}>
-                      {s.title}
+                    <div className="flex items-center gap-2">
+                      <span className={`text-xs font-mono font-medium ${isCurrent ? 'text-white' : isCompleted ? 'text-zinc-200' : isFailed ? 'text-red-400' : 'text-zinc-500'}`}>
+                        {s.title}
+                      </span>
+                      {isCurrent && (
+                        <span className="text-[10px] px-1.5 py-0.2 bg-blue-500/20 text-blue-400 border border-blue-500/30 rounded font-mono animate-pulse">
+                          running
+                        </span>
+                      )}
                     </div>
-                    <div className="text-[11px] text-zinc-400 mt-0.5">{s.desc}</div>
+                    <p className="text-[11px] text-zinc-500 mt-0.5">{s.desc}</p>
                   </div>
                 </div>
               );
             })}
-          </div>
-
-          <div className="pt-4 border-t border-zinc-800/80 text-[11px] text-zinc-500 font-mono flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <ShieldCheck className="w-4 h-4 text-emerald-500" />
-              <span>Isolated workspace: .devforge/generated/app_{currentJob?.application_id || '...'}</span>
-            </div>
-            <span className="text-[10px] text-zinc-500">PostgreSQL SKIP LOCKED Queue</span>
           </div>
         </div>
       </div>
     );
   }
 
-  // 2. SUCCESS SCREEN: APPLICATION READY
+  // 2. READY SCREEN: PROVISIONING SUCCESSFUL
   if (stage === 'ready' && provisionResult) {
     const app = provisionResult.application;
     return (
-      <div className="p-8 max-w-3xl mx-auto space-y-6 animate-in fade-in duration-200">
+      <div className="p-4 sm:p-8 max-w-2xl mx-auto space-y-6 w-full min-w-0 animate-in fade-in duration-200">
         <div className="border border-emerald-500/40 bg-[#0e0e11] rounded-lg p-6 space-y-6 shadow-2xl">
-          {/* Header */}
-          <div className="flex items-center justify-between pb-4 border-b border-zinc-800">
-            <div className="flex items-center gap-3">
-              <div className="w-9 h-9 rounded-full bg-emerald-500/20 border border-emerald-500 flex items-center justify-center text-emerald-400">
-                <CheckCircle2 className="w-5 h-5" />
-              </div>
-              <div>
-                <div className="flex items-center gap-2">
-                  <h2 className="text-lg font-bold text-white font-mono">{app.name}</h2>
-                  <span className="px-2 py-0.5 rounded text-[10px] font-mono bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
-                    READY
-                  </span>
-                </div>
-                <p className="text-xs text-zinc-400 mt-0.5">Application successfully generated and registered in PostgreSQL</p>
-              </div>
+          <div className="flex items-start gap-3.5">
+            <div className="w-10 h-10 rounded-full bg-emerald-500/20 border border-emerald-500 flex items-center justify-center text-emerald-400 shrink-0">
+              <CheckCircle2 className="w-5 h-5" />
             </div>
-            <span className="text-xs font-mono text-zinc-500">ID #{app.id}</span>
-          </div>
-
-          {/* Details Grid */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs font-mono">
-            <div className="p-3 bg-zinc-950 rounded border border-zinc-800">
-              <span className="text-[10px] text-zinc-500 uppercase">Template</span>
-              <div className="text-zinc-200 font-semibold mt-1">{app.template || runtimeTemplate}</div>
-            </div>
-            <div className="p-3 bg-zinc-950 rounded border border-zinc-800">
-              <span className="text-[10px] text-zinc-500 uppercase">Runtime</span>
-              <div className="text-zinc-200 font-semibold mt-1">{app.runtime}</div>
-            </div>
-            <div className="p-3 bg-zinc-950 rounded border border-zinc-800">
-              <span className="text-[10px] text-zinc-500 uppercase">Environment</span>
-              <div className="text-zinc-200 font-semibold mt-1 uppercase">{app.environment}</div>
-            </div>
-            <div className="p-3 bg-zinc-950 rounded border border-zinc-800">
-              <span className="text-[10px] text-zinc-500 uppercase">Port / Database</span>
-              <div className="text-zinc-200 font-semibold mt-1">:{app.port} / {app.database_type || 'none'}</div>
+            <div>
+              <h2 className="text-base font-bold text-white font-mono">Application Provisioned Successfully</h2>
+              <p className="text-xs text-zinc-400 mt-1">
+                Scaffolded with <span className="text-emerald-400 font-semibold">{selectedTemplate.name} v{selectedTemplate.version}</span>. Initialized in PostgreSQL and ready for deployment.
+              </p>
             </div>
           </div>
 
-          {/* Generated Project Files Location */}
-          <div className="p-3.5 bg-zinc-950 rounded border border-zinc-800 space-y-2 text-xs font-mono">
-            <div className="flex items-center justify-between text-zinc-400">
-              <div className="flex items-center gap-2">
-                <FolderTree className="w-4 h-4 text-emerald-400" />
-                <span className="text-zinc-200 font-semibold">Generated Project Location:</span>
-              </div>
-              <span className="text-[10px] text-zinc-500">{provisionResult.files_generated.length} files scaffolded</span>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs font-mono">
+            <div className="p-3 bg-zinc-950 rounded border border-zinc-800">
+              <div className="text-zinc-500 text-[10px]">APPLICATION</div>
+              <div className="text-white font-semibold mt-0.5">{app.name}</div>
             </div>
-            <div className="text-emerald-400 bg-zinc-900/80 px-3 py-1.5 rounded border border-zinc-800 text-[11px]">
-              {provisionResult.generated_path || `.devforge/generated/${app.name}`}
+            <div className="p-3 bg-zinc-950 rounded border border-zinc-800">
+              <div className="text-zinc-500 text-[10px]">TEMPLATE & VERSION</div>
+              <div className="text-white font-semibold mt-0.5">{selectedTemplate.name} (v{selectedTemplate.version})</div>
             </div>
-          </div>
-
-          {/* GitHub Repository */}
-          <div className="p-3.5 bg-zinc-950 rounded border border-zinc-800 space-y-2 text-xs font-mono">
-            <div className="flex items-center justify-between text-zinc-400">
-              <div className="flex items-center gap-2">
-                <Github className="w-4 h-4 text-emerald-400" />
-                <span className="text-zinc-200 font-semibold">GitHub Repository</span>
-              </div>
-              <span className="text-[10px] text-zinc-500">
-                Branch: {app.repository_default_branch || app.branch || 'main'}
-              </span>
+            <div className="p-3 bg-zinc-950 rounded border border-zinc-800">
+              <div className="text-zinc-500 text-[10px]">ENVIRONMENT</div>
+              <div className="text-white font-semibold mt-0.5 uppercase">{app.environment}</div>
             </div>
-            <div className="flex items-center justify-between p-2.5 rounded bg-zinc-900/80 border border-zinc-800">
-              <div className="flex items-center gap-2">
-                <GitBranch className="w-3.5 h-3.5 text-zinc-500" />
-                <span className="text-xs text-emerald-400 font-semibold">
-                  {app.repository_owner && app.repository_name
-                    ? `${app.repository_owner}/${app.repository_name}`
-                    : (app.repository_url || '').replace(/^https:\/\/github\.com\//, '')}
-                </span>
-              </div>
-              {app.repository_url && (
-                <a
-                  href={app.repository_url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center gap-1.5 px-3 py-1 text-xs font-semibold rounded bg-emerald-600/20 text-emerald-300 border border-emerald-500/40 hover:bg-emerald-600/30 transition"
-                >
-                  <span>Open Repository</span>
-                  <ExternalLink className="w-3 h-3" />
-                </a>
-              )}
+            <div className="p-3 bg-zinc-950 rounded border border-zinc-800">
+              <div className="text-zinc-500 text-[10px]">CONTAINER PORT</div>
+              <div className="text-white font-semibold mt-0.5">{app.port}</div>
             </div>
           </div>
 
-          {/* devforge.yaml snippet */}
-          {provisionResult.manifest && (
-            <div className="space-y-1.5">
-              <div className="flex items-center justify-between text-xs text-zinc-400">
-                <div className="flex items-center gap-1.5">
-                  <FileCode className="w-3.5 h-3.5 text-zinc-400" />
-                  <span className="font-mono text-zinc-300">Generated devforge.yaml</span>
-                </div>
-                <span className="text-[10px] font-mono text-zinc-500">apiVersion: devforge/v1</span>
-              </div>
-              <pre className="p-3 bg-zinc-950 rounded border border-zinc-800 text-[11px] font-mono text-zinc-300 overflow-x-auto max-h-48 leading-relaxed">
-                {provisionResult.manifest}
-              </pre>
-            </div>
-          )}
-
-          {/* Actions */}
           <div className="pt-3 border-t border-zinc-800 flex items-center justify-between">
             <button
               onClick={onBack}
@@ -505,15 +479,13 @@ export const CreateApplicationPage: React.FC<CreateApplicationPageProps> = ({
             >
               ← Back to Applications
             </button>
-            <div className="flex items-center gap-3">
-              <button
-                onClick={() => onSuccess(app)}
-                className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold rounded font-mono transition flex items-center gap-1.5 shadow"
-              >
-                <span>Open Application</span>
-                <ChevronRight className="w-4 h-4" />
-              </button>
-            </div>
+            <button
+              onClick={() => onSuccess(app)}
+              className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold rounded font-mono transition flex items-center gap-1.5 shadow"
+            >
+              <span>Open Application</span>
+              <ChevronRight className="w-4 h-4" />
+            </button>
           </div>
         </div>
       </div>
@@ -583,11 +555,12 @@ export const CreateApplicationPage: React.FC<CreateApplicationPageProps> = ({
 
   // 4. WIZARD FORM (Steps 1, 2, 3)
   return (
-    <div className="p-4 sm:p-6 max-w-5xl mx-auto space-y-6 w-full min-w-0">
+    <div className="p-4 sm:p-6 max-w-6xl mx-auto space-y-6 w-full min-w-0" data-testid="create-application-page">
       {/* Header */}
       <div className="flex items-center gap-3 pb-2 border-b border-zinc-800/80">
         <button
           onClick={onBack}
+          aria-label="Back to Applications"
           className="p-1.5 rounded hover:bg-zinc-800 text-zinc-400 hover:text-white transition"
         >
           <ArrowLeft className="w-4 h-4" />
@@ -597,7 +570,7 @@ export const CreateApplicationPage: React.FC<CreateApplicationPageProps> = ({
             Create Application
           </h1>
           <p className="text-xs text-zinc-400 mt-0.5">
-            Self-service a real, runnable microservice scaffolded directly from DevForge starter templates.
+            Select a reusable template to generate, validate, and scaffold a production-ready application.
           </p>
         </div>
       </div>
@@ -605,9 +578,9 @@ export const CreateApplicationPage: React.FC<CreateApplicationPageProps> = ({
       {/* Progress Steps Indicator */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs font-mono">
         {[
-          { num: 1, title: 'Basics & Identity' },
-          { num: 2, title: 'Runtime & Template' },
-          { num: 3, title: 'Environment & Config' }
+          { num: 1, title: 'Identity & Source' },
+          { num: 2, title: 'Template Catalog' },
+          { num: 3, title: 'Runtime & Preview' }
         ].map((s) => (
           <div
             key={s.num}
@@ -630,10 +603,10 @@ export const CreateApplicationPage: React.FC<CreateApplicationPageProps> = ({
         ))}
       </div>
 
-      {/* Main Grid: Form (7 cols) + Live Manifest Preview (5 cols) */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+      {/* Main Grid: Form (7 cols) + Live Template & Manifest Preview (5 cols) */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 min-w-0">
         {/* Form Container */}
-        <div className="lg:col-span-7 border border-zinc-800 bg-[#0e0e11] rounded-md p-5">
+        <div className="lg:col-span-7 border border-zinc-800 bg-[#0e0e11] rounded-md p-5 min-w-0">
           {error && (
             <div className="mb-4 p-3 rounded bg-red-950/50 border border-red-800/80 text-red-200 text-xs flex items-center gap-2">
               <AlertCircle className="w-4 h-4 shrink-0 text-red-400" />
@@ -641,23 +614,36 @@ export const CreateApplicationPage: React.FC<CreateApplicationPageProps> = ({
             </div>
           )}
 
+          {validationErrors.length > 0 && (
+            <div className="mb-4 p-3 rounded bg-amber-950/40 border border-amber-800/60 text-amber-200 text-xs space-y-1">
+              {validationErrors.map((err, i) => (
+                <div key={i} className="flex items-center gap-1.5">
+                  <span className="w-1.5 h-1.5 rounded-full bg-amber-400"></span>
+                  <span>{err}</span>
+                </div>
+              ))}
+            </div>
+          )}
+
           <form onSubmit={handleSubmit} className="space-y-4">
-            {/* STEP 1: Basics */}
+            {/* STEP 1: Basics & Identity */}
             {step === 1 && (
               <div className="space-y-4">
                 <div className="space-y-1.5">
                   <label className="text-xs font-semibold text-zinc-200 flex items-center justify-between">
                     <span>Application Name</span>
-                    <span className="text-[10px] text-zinc-500 font-mono">RFC 1123 format (lowercase alphanumeric & hyphens)</span>
+                    <span className="text-[10px] text-zinc-500 font-mono">RFC 1123 compliant</span>
                   </label>
                   <input
                     type="text"
                     required
+                    data-testid="input-app-name"
                     placeholder="e.g. order-processing-service"
                     value={name}
                     onChange={(e) => handleNameChange(e.target.value)}
                     className="w-full px-3 py-2 bg-zinc-950 border border-zinc-800 rounded text-xs text-zinc-200 font-mono focus:outline-none focus:border-zinc-600"
                   />
+                  <p className="text-[10px] text-zinc-500">Must contain only lowercase alphanumeric characters or '-', length 2-63.</p>
                 </div>
 
                 <div className="space-y-1.5">
@@ -682,7 +668,7 @@ export const CreateApplicationPage: React.FC<CreateApplicationPageProps> = ({
                     Description
                   </label>
                   <textarea
-                    rows={3}
+                    rows={2}
                     placeholder="Brief architectural summary of this service..."
                     value={description}
                     onChange={(e) => setDescription(e.target.value)}
@@ -690,77 +676,99 @@ export const CreateApplicationPage: React.FC<CreateApplicationPageProps> = ({
                   />
                 </div>
 
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-semibold text-zinc-200">
+                      Repository URL
+                    </label>
+                    <input
+                      type="text"
+                      value={repoUrl}
+                      onChange={(e) => setRepoUrl(e.target.value)}
+                      className="w-full px-3 py-2 bg-zinc-950 border border-zinc-800 rounded text-xs text-zinc-200 font-mono focus:outline-none focus:border-zinc-600"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-semibold text-zinc-200">
+                      Repository Visibility
+                    </label>
+                    <select
+                      value={repoVisibility}
+                      onChange={(e) => setRepoVisibility(e.target.value as any)}
+                      className="w-full px-3 py-2 bg-zinc-950 border border-zinc-800 rounded text-xs text-zinc-200 focus:outline-none focus:border-zinc-600 font-mono"
+                    >
+                      <option value="private">Private (Default)</option>
+                      <option value="public">Public</option>
+                    </select>
+                  </div>
+                </div>
+
                 <div className="pt-2 flex justify-end">
                   <button
                     type="button"
-                    onClick={() => setStep(2)}
-                    disabled={!name.trim()}
+                    onClick={() => {
+                      if (validateName(name)) {
+                        setStep(2);
+                      }
+                    }}
+                    disabled={!name.trim() || validationErrors.length > 0}
                     className="px-4 py-2 bg-zinc-100 hover:bg-white text-zinc-950 text-xs font-semibold rounded transition disabled:opacity-50"
                   >
-                    Next: Runtime & Template →
+                    Next: Select Template →
                   </button>
                 </div>
               </div>
             )}
 
-            {/* STEP 2: Runtime & Starter Template */}
+            {/* STEP 2: Template Catalog Selection */}
             {step === 2 && (
-              <div className="space-y-4">
-                <div className="space-y-2">
-                  <label className="text-xs font-semibold text-zinc-200">
-                    Select Starter Template
+              <div className="space-y-4" data-testid="template-catalog-section">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-semibold text-zinc-200 flex items-center gap-1.5">
+                    <Layers className="w-3.5 h-3.5 text-emerald-400" />
+                    <span>Application Template Catalog</span>
                   </label>
-                  <div className="grid grid-cols-1 gap-2.5">
-                    {templates.map((tpl) => {
-                      const isSelected = runtimeTemplate === tpl.id;
-                      return (
-                        <div
-                          key={tpl.id}
-                          onClick={() => handleTemplateSelect(tpl)}
-                          className={`p-3 rounded border cursor-pointer transition ${
-                            isSelected
-                              ? 'border-emerald-500 bg-zinc-900 text-white'
-                              : 'border-zinc-800 bg-zinc-950 text-zinc-300 hover:border-zinc-700'
-                          }`}
-                        >
-                          <div className="flex items-center justify-between">
-                            <div className="flex items-center gap-2">
-                              <span className="font-semibold text-xs font-mono">{tpl.name}</span>
-                              <span className="text-[10px] px-1.5 py-0.2 rounded bg-zinc-800 text-zinc-400 font-mono">
-                                {tpl.tag}
-                              </span>
-                            </div>
-                            <span className="text-[11px] font-mono text-zinc-400">Default port :{tpl.defaultPort}</span>
+                  <span className="text-[10px] text-zinc-400 font-mono">{templates.length} templates available</span>
+                </div>
+
+                {/* Compact Template Cards / Rows */}
+                <div className="space-y-2.5">
+                  {templates.map((tpl) => {
+                    const isSelected = selectedTemplateId === tpl.template_id;
+                    return (
+                      <div
+                        key={tpl.template_id}
+                        data-testid={`template-card-${tpl.template_id}`}
+                        onClick={() => handleTemplateSelect(tpl)}
+                        className={`p-3 rounded-md border cursor-pointer transition ${
+                          isSelected
+                            ? 'border-emerald-500 bg-zinc-900/90 text-white shadow-sm'
+                            : 'border-zinc-800 bg-zinc-950 text-zinc-300 hover:border-zinc-700'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="flex items-center gap-2">
+                            <span className="font-semibold text-xs font-mono">{tpl.name}</span>
+                            <span className="text-[10px] px-1.5 py-0.5 rounded bg-zinc-800 text-zinc-300 border border-zinc-700 font-mono">
+                              v{tpl.version}
+                            </span>
+                            <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-950/80 text-emerald-300 border border-emerald-800/60 font-mono">
+                              {tpl.framework}
+                            </span>
                           </div>
-                          <p className="text-[11px] text-zinc-400 mt-1">{tpl.desc}</p>
+                          <span className="text-[11px] font-mono text-zinc-400 whitespace-nowrap">
+                            {tpl.runtime}
+                          </span>
                         </div>
-                      );
-                    })}
-                  </div>
-                </div>
-
-                <div className="space-y-1.5">
-                  <label className="text-xs font-semibold text-zinc-200">
-                    Repository URL
-                  </label>
-                  <input
-                    type="text"
-                    value={repoUrl}
-                    onChange={(e) => setRepoUrl(e.target.value)}
-                    className="w-full px-3 py-2 bg-zinc-950 border border-zinc-800 rounded text-xs text-zinc-200 font-mono focus:outline-none focus:border-zinc-600"
-                  />
-                </div>
-
-                <div className="space-y-1.5">
-                  <label className="text-xs font-semibold text-zinc-200">
-                    Default Branch
-                  </label>
-                  <input
-                    type="text"
-                    value={branch}
-                    onChange={(e) => setBranch(e.target.value)}
-                    className="w-full px-3 py-2 bg-zinc-950 border border-zinc-800 rounded text-xs text-zinc-200 font-mono focus:outline-none focus:border-zinc-600"
-                  />
+                        <p className="text-[11px] text-zinc-400 mt-1.5 leading-relaxed">{tpl.description}</p>
+                        
+                        <div className="mt-2 pt-2 border-t border-zinc-800/60 flex items-center justify-between text-[10px] font-mono text-zinc-500">
+                          <span>Env: {tpl.supported_environments.join(', ')}</span>
+                          <span>Port: :{tpl.default_values?.port || 8000}</span>
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
 
                 <div className="pt-2 flex items-center justify-between">
@@ -776,13 +784,13 @@ export const CreateApplicationPage: React.FC<CreateApplicationPageProps> = ({
                     onClick={() => setStep(3)}
                     className="px-4 py-2 bg-zinc-100 hover:bg-white text-zinc-950 text-xs font-semibold rounded transition"
                   >
-                    Next: Environment & Config →
+                    Next: Runtime & Preview →
                   </button>
                 </div>
               </div>
             )}
 
-            {/* STEP 3: Environment, Database & Sizing */}
+            {/* STEP 3: Environment, Database, Port & Submission */}
             {step === 3 && (
               <div className="space-y-4">
                 <div className="space-y-1.5">
@@ -814,6 +822,8 @@ export const CreateApplicationPage: React.FC<CreateApplicationPageProps> = ({
                     </label>
                     <input
                       type="number"
+                      min={1}
+                      max={65535}
                       value={port}
                       onChange={(e) => setPort(Number(e.target.value))}
                       className="w-full px-3 py-2 bg-zinc-950 border border-zinc-800 rounded text-xs text-zinc-200 font-mono focus:outline-none focus:border-zinc-600"
@@ -863,31 +873,19 @@ export const CreateApplicationPage: React.FC<CreateApplicationPageProps> = ({
                   </div>
                 </div>
 
-                {/* Deployment Strategy */}
+                {/* Optional Environment Variables */}
                 <div className="space-y-1.5">
-                  <label className="text-xs font-semibold text-zinc-200">
-                    Deployment Strategy
+                  <label className="text-xs font-semibold text-zinc-200 flex items-center justify-between">
+                    <span>Environment Variables (Optional)</span>
+                    <span className="text-[10px] text-zinc-500 font-mono">KEY=VALUE per line</span>
                   </label>
-                  <div className="grid grid-cols-3 gap-2 text-xs font-mono">
-                    {[
-                      { id: 'rolling', label: 'Rolling Update' },
-                      { id: 'recreate', label: 'Recreate' },
-                      { id: 'canary', label: 'Canary' }
-                    ].map((st) => (
-                      <button
-                        type="button"
-                        key={st.id}
-                        onClick={() => setDeploymentStrategy(st.id)}
-                        className={`p-2 rounded border text-center font-medium transition ${
-                          deploymentStrategy === st.id
-                            ? 'border-emerald-500 bg-zinc-900 text-white'
-                            : 'border-zinc-800 bg-zinc-950 text-zinc-400 hover:border-zinc-700'
-                        }`}
-                      >
-                        {st.label}
-                      </button>
-                    ))}
-                  </div>
+                  <textarea
+                    rows={2}
+                    placeholder="LOG_LEVEL=info&#10;ENABLE_METRICS=true"
+                    value={envVarsText}
+                    onChange={(e) => setEnvVarsText(e.target.value)}
+                    className="w-full px-3 py-2 bg-zinc-950 border border-zinc-800 rounded text-xs text-zinc-200 font-mono focus:outline-none focus:border-zinc-600"
+                  />
                 </div>
 
                 <div className="pt-4 flex items-center justify-between border-t border-zinc-800">
@@ -900,6 +898,7 @@ export const CreateApplicationPage: React.FC<CreateApplicationPageProps> = ({
                   </button>
                   <button
                     type="submit"
+                    data-testid="create-app-submit"
                     className="px-5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold rounded transition shadow-sm flex items-center gap-1.5"
                   >
                     <CheckCircle2 className="w-4 h-4" />
@@ -911,18 +910,98 @@ export const CreateApplicationPage: React.FC<CreateApplicationPageProps> = ({
           </form>
         </div>
 
-        {/* Live Manifest Preview (5 cols) */}
-        <div className="lg:col-span-5 border border-zinc-800 bg-[#0e0e11] rounded-md p-4 flex flex-col justify-between">
+        {/* Live Template & Manifest Preview (5 cols) */}
+        <div className="lg:col-span-5 border border-zinc-800 bg-[#0e0e11] rounded-md p-4 flex flex-col justify-between min-w-0">
           <div>
+            {/* Preview Navigation Tabs */}
             <div className="flex items-center justify-between pb-3 border-b border-zinc-800">
               <div className="flex items-center gap-2">
-                <FileCode className="w-4 h-4 text-emerald-400" />
-                <span className="text-xs font-semibold text-zinc-200 font-mono">devforge.yaml</span>
+                <button
+                  type="button"
+                  onClick={() => setPreviewTab('preview')}
+                  className={`flex items-center gap-1.5 px-2 py-1 rounded text-xs font-mono transition ${
+                    previewTab === 'preview'
+                      ? 'bg-zinc-800 text-white font-semibold'
+                      : 'text-zinc-400 hover:text-zinc-200'
+                  }`}
+                >
+                  <Eye className="w-3.5 h-3.5 text-emerald-400" />
+                  <span>Template Preview</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPreviewTab('manifest')}
+                  className={`flex items-center gap-1.5 px-2 py-1 rounded text-xs font-mono transition ${
+                    previewTab === 'manifest'
+                      ? 'bg-zinc-800 text-white font-semibold'
+                      : 'text-zinc-400 hover:text-zinc-200'
+                  }`}
+                >
+                  <FileCode className="w-3.5 h-3.5 text-blue-400" />
+                  <span>devforge.yaml</span>
+                </button>
               </div>
-              <span className="text-[10px] font-mono text-zinc-500">apiVersion: devforge/v1</span>
+              <span className="text-[10px] font-mono text-zinc-500">v{selectedTemplate.version}</span>
             </div>
 
-            <pre className="mt-3 text-[11px] font-mono text-zinc-300 bg-zinc-950 p-3 rounded border border-zinc-800 overflow-x-auto leading-relaxed">
+            {/* TAB 1: Template Preview */}
+            {previewTab === 'preview' && (
+              <div className="mt-3 space-y-3 font-mono text-xs text-zinc-300" data-testid="template-preview-pane">
+                <div className="p-3 bg-zinc-950 rounded border border-zinc-800 space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <span className="text-zinc-500 text-[10px]">SELECTED TEMPLATE</span>
+                    <span className="text-emerald-400 text-[10px] font-bold">ACTIVE</span>
+                  </div>
+                  <div className="text-white font-semibold">{selectedTemplate.name}</div>
+                  <div className="text-[11px] text-zinc-400">
+                    {selectedTemplate.runtime} • {selectedTemplate.framework} (v{selectedTemplate.version})
+                  </div>
+                </div>
+
+                <div className="p-3 bg-zinc-950 rounded border border-zinc-800 space-y-1.5">
+                  <div className="text-zinc-500 text-[10px]">APPLICATION TARGET</div>
+                  <div className="text-white font-medium">{name || 'example-app'} ({environment})</div>
+                  <div className="text-[11px] text-zinc-400">Container Port: {port} • DB: {databaseType}</div>
+                </div>
+
+                <div className="p-3 bg-zinc-950 rounded border border-zinc-800 space-y-1.5">
+                  <div className="text-zinc-500 text-[10px]">KEY GENERATED COMPONENTS</div>
+                  <ul className="space-y-1 text-[11px] text-zinc-400">
+                    {(serverPreview?.key_generated_components || [
+                      'Main entrypoint and routing configuration',
+                      'Standard health probe endpoints (/healthz, /ready)',
+                      'Container build specification (Dockerfile, .dockerignore)',
+                      'Automated CI/CD workflow (.github/workflows/ci.yml)',
+                      'Kubernetes deployment and service manifests'
+                    ]).map((comp, idx) => (
+                      <li key={idx} className="flex items-start gap-1.5">
+                        <span className="text-emerald-500">•</span>
+                        <span>{comp}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+
+                <div className="p-3 bg-zinc-950 rounded border border-zinc-800 space-y-1.5">
+                  <div className="text-zinc-500 text-[10px] flex items-center justify-between">
+                    <span>GENERATED PROJECT STRUCTURE</span>
+                    <span>{selectedTemplate.generated_project_structure.length} files</span>
+                  </div>
+                  <div className="text-[11px] text-zinc-400 space-y-0.5 max-h-32 overflow-y-auto">
+                    {selectedTemplate.generated_project_structure.map((file, idx) => (
+                      <div key={idx} className="flex items-center gap-1.5">
+                        <FolderTree className="w-3 h-3 text-zinc-500 shrink-0" />
+                        <span>{file}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* TAB 2: devforge.yaml Manifest */}
+            {previewTab === 'manifest' && (
+              <pre className="mt-3 text-[11px] font-mono text-zinc-300 bg-zinc-950 p-3 rounded border border-zinc-800 overflow-x-auto leading-relaxed">
 {`apiVersion: devforge/v1
 kind: ApplicationManifest
 metadata:
@@ -931,8 +1010,10 @@ metadata:
   description: "${description || 'Self-serviced application'}"
   team: "${team}"
 spec:
-  runtime: "${templates.find((t) => t.id === runtimeTemplate)?.canonicalRuntime || 'python'}"
-  template: "${runtimeTemplate}"
+  template_id: "${selectedTemplate.template_id}"
+  template_version: "${selectedTemplate.version}"
+  runtime: "${selectedTemplate.runtime}"
+  framework: "${selectedTemplate.framework}"
   environment: "${environment}"
   port: ${port}
   database:
@@ -944,20 +1025,21 @@ spec:
     strategy: "${deploymentStrategy}"
     replicas: ${replicas}
   healthCheck:
-    path: "${runtimeTemplate === 'go-microservice' ? '/health' : runtimeTemplate === 'react-vite' ? '/' : '/healthz'}"
+    path: "${selectedTemplate.runtime === 'go' ? '/health' : '/healthz'}"
     port: ${port}`}
-            </pre>
+              </pre>
+            )}
           </div>
 
           <div className="mt-4 p-3 rounded bg-zinc-900/60 border border-zinc-800 text-[11px] text-zinc-400 font-mono space-y-1">
             <div className="text-zinc-300 font-semibold flex items-center gap-1.5">
               <Server className="w-3.5 h-3.5 text-emerald-400" />
-              <span>Phase 2 Provisioning Pipeline:</span>
+              <span>Phase 13 Scaffolding Engine:</span>
             </div>
-            <div>• Real template discovery from templates/{runtimeTemplate}</div>
-            <div>• Scaffolds real project in .devforge/generated/{name || 'app'}</div>
-            <div>• Validates devforge.yaml v1 schema</div>
-            <div>• Persists record in PostgreSQL with READY status</div>
+            <div>• Discovered from templates/{selectedTemplate.template_id}</div>
+            <div>• Deterministic token substitution with unresolved token detection</div>
+            <div>• Full validation of entrypoints, dependencies, tests, & manifests</div>
+            <div>• Persisted in PostgreSQL with template version association</div>
           </div>
         </div>
       </div>

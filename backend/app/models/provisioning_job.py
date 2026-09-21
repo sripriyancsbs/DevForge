@@ -13,6 +13,7 @@ class ProvisioningJob(Base):
     application_id = Column(Integer, ForeignKey("applications.id", ondelete="CASCADE"), nullable=False, index=True)
     status = Column(String(30), nullable=False, default="PENDING", index=True)  # PENDING, PROVISIONING, VALIDATING, READY, FAILED, RETRY
     template = Column(String(100), nullable=False)
+    template_version = Column(String(50), nullable=False, default="1.0.0")
     current_step = Column(String(50), nullable=False, default="VALIDATE_CONFIGURATION")  # VALIDATE_CONFIGURATION, PREPARE_WORKSPACE, GENERATE_PROJECT, GENERATE_MANIFEST, GENERATING_CI_WORKFLOW, VALIDATE_PROJECT, CREATING_REPOSITORY, PUSHING_REPOSITORY, COMPLETED
     attempt = Column(Integer, nullable=False, default=1)
     max_attempts = Column(Integer, nullable=False, default=3)

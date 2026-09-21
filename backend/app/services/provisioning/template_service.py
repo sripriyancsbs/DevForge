@@ -11,6 +11,20 @@ SUPPORTED_TEMPLATES = {
         "default_port": 8000,
         "required_files": ["Dockerfile", "devforge.yaml", "main.py", "requirements.txt"]
     },
+    "node-express": {
+        "name": "Node.js Express API",
+        "runtime": "node",
+        "runtime_display": "Node.js 20 (Express)",
+        "default_port": 3000,
+        "required_files": ["Dockerfile", "devforge.yaml", "server.js", "package.json"]
+    },
+    "go-gin": {
+        "name": "Go Gin API",
+        "runtime": "go",
+        "runtime_display": "Go 1.22 (Gin)",
+        "default_port": 8080,
+        "required_files": ["Dockerfile", "devforge.yaml", "main.go", "go.mod"]
+    },
     "react-vite": {
         "name": "React + Vite",
         "runtime": "react",

@@ -12,6 +12,9 @@ from app.models.gitops_application import GitOpsApplication
 from app.models.gitops_operation import GitOpsOperation
 from app.models.remediation import RemediationPolicy, RemediationEvent, RemediationExecution
 from app.models.user import User
+from app.models.template import Template
+from app.models.workspace import Workspace
+from app.models.workspace_member import WorkspaceMember
 
 __all__ = [
     "Application",
@@ -30,4 +33,7 @@ __all__ = [
     "RemediationEvent",
     "RemediationExecution",
     "User",
+    "Template",
+    "Workspace",
+    "WorkspaceMember",
 ]

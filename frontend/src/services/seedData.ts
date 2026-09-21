@@ -27,7 +27,8 @@ import {
   AlertRule,
   ScrapeTarget,
   GitHubStatusResponse,
-  ApplicationProvisioningResponse
+  ApplicationProvisioningResponse,
+  ApplicationTemplate
 } from '../types';
 
 export const SEED_APPLICATIONS: Application[] = [
@@ -719,3 +720,81 @@ spec:
     endpoint: /healthz
     periodSeconds: 10
 `;
+
+export const SEED_TEMPLATES: ApplicationTemplate[] = [
+  {
+    id: 1,
+    template_id: 'python-fastapi',
+    name: 'Python FastAPI API',
+    description: 'High-performance asynchronous REST microservice with automatic OpenAPI schema, Pydantic validation, and health probe endpoints.',
+    runtime: 'python',
+    framework: 'FastAPI',
+    version: '1.0.0',
+    supported_environments: ['development', 'staging', 'production'],
+    generated_project_structure: [
+      'main.py',
+      'requirements.txt',
+      'Dockerfile',
+      '.dockerignore',
+      'README.md',
+      'devforge.yaml',
+      '.github/workflows/ci.yml',
+      'tests/test_main.py'
+    ],
+    required_variables: ['application_name', 'environment', 'port'],
+    optional_variables: { description: 'string', team: 'string', database_type: 'string', replicas: 'number' },
+    default_values: { port: 8000, replicas: 2, database_type: 'postgresql', deployment_strategy: 'rolling' },
+    validation_rules: { name_pattern: '^[a-z0-9]([-a-z0-9]*[a-z0-9])?$', port_range: [1, 65535] },
+    is_enabled: true
+  },
+  {
+    id: 2,
+    template_id: 'node-express',
+    name: 'Node.js Express API',
+    description: 'Event-driven Node.js REST API service built with Express, structured routing, test suite, and optimized containerfile.',
+    runtime: 'node',
+    framework: 'Express',
+    version: '1.0.0',
+    supported_environments: ['development', 'staging', 'production'],
+    generated_project_structure: [
+      'server.js',
+      'package.json',
+      'Dockerfile',
+      '.dockerignore',
+      'README.md',
+      'devforge.yaml',
+      '.github/workflows/ci.yml',
+      'test.js'
+    ],
+    required_variables: ['application_name', 'environment', 'port'],
+    optional_variables: { description: 'string', team: 'string', database_type: 'string', replicas: 'number' },
+    default_values: { port: 3000, replicas: 2, database_type: 'none', deployment_strategy: 'rolling' },
+    validation_rules: { name_pattern: '^[a-z0-9]([-a-z0-9]*[a-z0-9])?$', port_range: [1, 65535] },
+    is_enabled: true
+  },
+  {
+    id: 3,
+    template_id: 'go-gin',
+    name: 'Go Gin API',
+    description: 'Compiled, low-latency microservice powered by the Gin Gonic web framework with multi-stage minimal container build.',
+    runtime: 'go',
+    framework: 'Gin',
+    version: '1.0.0',
+    supported_environments: ['development', 'staging', 'production'],
+    generated_project_structure: [
+      'main.go',
+      'go.mod',
+      'Dockerfile',
+      '.dockerignore',
+      'README.md',
+      'devforge.yaml',
+      '.github/workflows/ci.yml',
+      'main_test.go'
+    ],
+    required_variables: ['application_name', 'environment', 'port'],
+    optional_variables: { description: 'string', team: 'string', database_type: 'string', replicas: 'number' },
+    default_values: { port: 8080, replicas: 2, database_type: 'none', deployment_strategy: 'rolling' },
+    validation_rules: { name_pattern: '^[a-z0-9]([-a-z0-9]*[a-z0-9])?$', port_range: [1, 65535] },
+    is_enabled: true
+  }
+];

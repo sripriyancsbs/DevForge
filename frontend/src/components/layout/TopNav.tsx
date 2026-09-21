@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Search,
   Bell,
@@ -10,12 +10,10 @@ import {
   Plus,
   ArrowRight,
   Wrench,
-  Shield,
-  User as UserIcon,
   ChevronDown
 } from 'lucide-react';
-import { OverviewData, RemediationEvent, User, Role } from '../../types';
-import { api, getStoredUser } from '../../services/api';
+import { OverviewData, RemediationEvent, User } from '../../types';
+import { api, getStoredUser, setStoredUser } from '../../services/api';
 
 interface TopNavProps {
   onToggleSidebar: () => void;
@@ -51,14 +49,83 @@ export const TopNav: React.FC<TopNavProps> = ({
   const [remediationEvents, setRemediationEvents] = useState<RemediationEvent[]>([]);
   const [applicationsList, setApplicationsList] = useState<{ id: number; name: string }[]>([]);
 
+  const notificationRef = useRef<HTMLDivElement>(null);
+  const userMenuRef = useRef<HTMLDivElement>(null);
+
   useEffect(() => {
+    // Refresh authoritative current user info from backend
+    api.getCurrentUser()
+      .then((u) => {
+        setCurrentUser(u);
+        setStoredUser(u);
+      })
+      .catch(() => {});
+
     api.getApplications()
       .then((apps) => setApplicationsList(apps.map((a) => ({ id: a.id, name: a.name }))))
       .catch(() => setApplicationsList([]));
+
     api.listRemediationEvents()
       .then(setRemediationEvents)
       .catch(() => setRemediationEvents([]));
   }, []);
+
+  // Outside click & Escape listeners for popovers
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target as Node;
+      if (showNotifications && notificationRef.current && !notificationRef.current.contains(target)) {
+        setShowNotifications(false);
+      }
+      if (showUserMenu && userMenuRef.current && !userMenuRef.current.contains(target)) {
+        setShowUserMenu(false);
+      }
+    };
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setShowNotifications(false);
+        setShowUserMenu(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    document.addEventListener('keydown', handleKeyDown);
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [showNotifications, showUserMenu]);
+
+  const toggleNotifications = () => {
+    if (!showNotifications) {
+      setShowUserMenu(false);
+      setShowNotifications(true);
+    } else {
+      setShowNotifications(false);
+    }
+  };
+
+  const toggleUserMenu = () => {
+    if (!showUserMenu) {
+      setShowNotifications(false);
+      setShowUserMenu(true);
+    } else {
+      setShowUserMenu(false);
+    }
+  };
+
+  const handleWorkspaceChange = async (wsId: number) => {
+    try {
+      const updated = await api.switchWorkspace(wsId);
+      setCurrentUser(updated);
+      setShowUserMenu(false);
+      window.location.reload();
+    } catch (err) {
+      console.error('Failed to switch workspace:', err);
+    }
+  };
 
   const resolveAppName = (appId: number): string => {
     const found = applicationsList.find((a) => a.id === appId);
@@ -83,6 +150,8 @@ export const TopNav: React.FC<TopNavProps> = ({
     onNavigateToApp(appName, tab);
   };
 
+  const activeWorkspaceName = currentUser.active_workspace?.slug || 'default-workspace';
+
   return (
     <header className="h-14 border-b border-[#27272a] bg-[#0c0c0e] px-4 flex items-center justify-between sticky top-0 z-30 min-w-0 w-full">
       {/* Left section: Mobile menu button + Workspace Indicator */}
@@ -95,14 +164,14 @@ export const TopNav: React.FC<TopNavProps> = ({
           <Menu className="w-5 h-5" />
         </button>
 
-        {/* Current Workspace Badge - Truthful, No Platform Version Badge */}
-        <div className="flex items-center gap-2 text-xs font-medium text-zinc-300 px-2.5 py-1.5 rounded border border-zinc-800 bg-[#141417] min-w-0">
+        {/* Current Workspace Badge */}
+        <div id="top-nav-workspace-badge" className="flex items-center gap-2 text-xs font-medium text-zinc-300 px-2.5 py-1.5 rounded border border-zinc-800 bg-[#141417] min-w-0">
           <Layers className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
-          <span className="font-mono truncate max-w-[120px] sm:max-w-none">default-workspace</span>
+          <span className="font-mono truncate max-w-[140px] sm:max-w-none">{activeWorkspaceName}</span>
         </div>
       </div>
 
-      {/* Middle section: Clean Search Bar without Ctrl+K prompt */}
+      {/* Middle section: Search Bar */}
       <div className="flex-1 max-w-md mx-4 hidden sm:block">
         <div className="relative w-full">
           <Search className="w-3.5 h-3.5 text-zinc-500 absolute left-3 top-1/2 -translate-y-1/2" />
@@ -131,13 +200,13 @@ export const TopNav: React.FC<TopNavProps> = ({
           <span>New App</span>
         </button>
 
-        {/* Actionable Notifications */}
-        <div className="relative">
+        {/* Actionable Notifications Popover */}
+        <div className="relative" ref={notificationRef}>
           <button
             id="top-nav-bell-btn"
             data-testid="top-nav-bell-btn"
-            onClick={() => setShowNotifications(!showNotifications)}
-            className="relative p-1.5 text-zinc-400 hover:text-zinc-100 rounded border border-zinc-800 hover:border-zinc-700 bg-[#121215] transition"
+            onClick={toggleNotifications}
+            className="relative p-1.5 text-zinc-400 hover:text-zinc-100 rounded border border-zinc-800 hover:border-zinc-700 bg-[#121215] transition cursor-pointer"
             aria-label="Platform Notifications"
           >
             <Bell className="w-4 h-4" />
@@ -163,7 +232,6 @@ export const TopNav: React.FC<TopNavProps> = ({
                   </div>
                 ) : (
                   <>
-                    {/* Phase 11: Self-Healing & Remediation Notifications */}
                     {remediationEvents.map((rem) => {
                       const appName = resolveAppName(rem.application_id);
                       let title = 'Application Unhealthy';
@@ -228,7 +296,6 @@ export const TopNav: React.FC<TopNavProps> = ({
                       );
                     })}
 
-                    {/* Failed or Rolled Back Deployments */}
                     {failedDeployments.map((dep) => (
                       <div
                         key={`dep-${dep.id}`}
@@ -271,7 +338,6 @@ export const TopNav: React.FC<TopNavProps> = ({
                       </div>
                     ))}
 
-                    {/* Failing or Warning Services */}
                     {failingServices.map((svc) => (
                       <div
                         key={`svc-${svc.id}`}
@@ -331,21 +397,22 @@ export const TopNav: React.FC<TopNavProps> = ({
           )}
         </div>
 
-        {/* User profile avatar & RBAC Role Switcher */}
-        <div className="relative">
+        {/* User profile avatar & Production User Menu */}
+        <div className="relative" ref={userMenuRef}>
           <button
             id="user-profile-menu-button"
-            onClick={() => setShowUserMenu(!showUserMenu)}
+            data-testid="user-profile-menu-button"
+            onClick={toggleUserMenu}
             className="flex items-center gap-2 pl-2 border-l border-zinc-800 hover:opacity-90 transition cursor-pointer text-left focus:outline-none"
-            aria-label="User session and role options"
+            aria-label="User session and account options"
           >
             <div className="w-7 h-7 rounded bg-zinc-800 border border-zinc-700 flex items-center justify-center text-xs font-mono text-zinc-300 font-semibold uppercase">
-              {currentUser.username.slice(0, 2)}
+              {(currentUser.display_name || currentUser.username).slice(0, 2)}
             </div>
             <div className="hidden lg:block text-left">
               <div className="flex items-center gap-1.5">
                 <span className="text-xs font-medium text-zinc-200 leading-tight">
-                  {currentUser.username}
+                  {currentUser.display_name || currentUser.username}
                 </span>
                 <span className={`text-[9px] font-mono px-1.5 py-0.2 rounded border uppercase font-semibold ${
                   currentUser.role === 'ADMIN'
@@ -360,7 +427,7 @@ export const TopNav: React.FC<TopNavProps> = ({
                 </span>
               </div>
               <div className="text-[10px] text-zinc-500 font-mono flex items-center gap-1">
-                <span>RBAC Session</span>
+                <span>{activeWorkspaceName}</span>
                 <ChevronDown className="w-2.5 h-2.5" />
               </div>
             </div>
@@ -369,66 +436,96 @@ export const TopNav: React.FC<TopNavProps> = ({
           {showUserMenu && (
             <div
               id="user-profile-dropdown"
-              className="absolute right-0 mt-2 w-64 rounded-md border border-zinc-800 bg-[#141417] shadow-xl z-50 text-xs py-1 divide-y divide-zinc-800"
+              data-testid="user-profile-dropdown"
+              className="absolute right-0 mt-2 w-72 rounded-md border border-zinc-800 bg-[#141417] shadow-xl z-50 text-xs py-1 divide-y divide-zinc-800"
             >
               <div className="p-3">
-                <div className="text-xs font-semibold text-white">{currentUser.username}</div>
-                <div className="text-[11px] text-zinc-400 font-mono mt-0.5">{currentUser.email}</div>
-                <div className="mt-2 flex items-center justify-between">
-                  <span className="text-[11px] text-zinc-400">Active Role:</span>
-                  <span className={`text-[10px] font-mono px-2 py-0.5 rounded border uppercase font-bold ${
-                    currentUser.role === 'ADMIN'
-                      ? 'text-violet-400 bg-violet-950/60 border-violet-800/60'
-                      : currentUser.role === 'OPERATOR'
-                      ? 'text-emerald-400 bg-emerald-950/60 border-emerald-800/60'
-                      : currentUser.role === 'DEVELOPER'
-                      ? 'text-amber-400 bg-amber-950/60 border-amber-800/60'
-                      : 'text-zinc-400 bg-zinc-800 border-zinc-700'
-                  }`}>
-                    {currentUser.role}
-                  </span>
+                <div id="user-profile-name" className="text-xs font-semibold text-white">
+                  {currentUser.display_name || currentUser.username}
                 </div>
-              </div>
+                <div id="user-profile-email" className="text-[11px] text-zinc-400 font-mono mt-0.5">
+                  {currentUser.email}
+                </div>
+                
+                {/* Authoritative Workspace & Role Details */}
+                <div className="mt-2.5 p-2.5 rounded border border-zinc-800/80 bg-zinc-900/50 space-y-1.5">
+                  <div id="user-profile-workspace" className="text-xs text-zinc-300 font-mono">
+                    <span className="text-zinc-500">Workspace: </span>
+                    <span className="text-zinc-200 font-medium">{activeWorkspaceName}</span>
+                  </div>
+                  <div id="user-profile-role" className="text-xs text-zinc-300 font-mono flex items-center justify-between">
+                    <span>
+                      <span className="text-zinc-500">Role: </span>
+                      <span className={`font-mono font-bold uppercase ${
+                        currentUser.role === 'ADMIN'
+                          ? 'text-violet-400'
+                          : currentUser.role === 'OPERATOR'
+                          ? 'text-emerald-400'
+                          : currentUser.role === 'DEVELOPER'
+                          ? 'text-amber-400'
+                          : 'text-zinc-400'
+                      }`}>
+                        {currentUser.role}
+                      </span>
+                    </span>
+                    <span className="text-[9px] font-mono text-zinc-500 uppercase tracking-wider">
+                      Authoritative
+                    </span>
+                  </div>
+                </div>
 
-              <div className="p-2 space-y-1">
-                <div className="text-[10px] font-mono uppercase tracking-wider text-zinc-500 px-2 py-1">
-                  Switch Active Role (RBAC)
-                </div>
-                {(['ADMIN', 'OPERATOR', 'DEVELOPER', 'VIEWER'] as Role[]).map((r) => (
-                  <button
-                    key={r}
-                    id={`switch-role-${r.toLowerCase()}`}
-                    onClick={() => {
-                      const updated = api.switchRoleSession(r);
-                      setCurrentUser(updated);
-                      setShowUserMenu(false);
-                    }}
-                    className={`w-full text-left px-2.5 py-1.5 rounded flex items-center justify-between transition ${
-                      currentUser.role === r
-                        ? 'bg-zinc-800/80 text-white font-medium'
-                        : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/40'
-                    }`}
-                  >
-                    <span>{r}</span>
-                    {currentUser.role === r && (
-                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
-                    )}
-                  </button>
-                ))}
+                {/* Workspace Switching (Only visible if user belongs to multiple workspaces) */}
+                {currentUser.workspaces && currentUser.workspaces.length > 1 && (
+                  <div className="mt-2.5 pt-2 border-t border-zinc-800/60">
+                    <div className="text-[10px] font-mono uppercase tracking-wider text-zinc-500 mb-1.5">
+                      Switch Workspace
+                    </div>
+                    <div className="space-y-1">
+                      {currentUser.workspaces.map((ws) => (
+                        <button
+                          key={ws.id}
+                          id={`switch-workspace-${ws.slug}`}
+                          onClick={() => handleWorkspaceChange(ws.id)}
+                          className={`w-full text-left px-2 py-1.5 rounded text-xs flex items-center justify-between font-mono transition cursor-pointer ${
+                            (currentUser.active_workspace?.id === ws.id || activeWorkspaceName === ws.slug)
+                              ? 'bg-zinc-800 text-emerald-400 border border-zinc-700'
+                              : 'text-zinc-300 hover:bg-zinc-800/50'
+                          }`}
+                        >
+                          <span className="truncate">{ws.name}</span>
+                          <span className="text-[10px] text-zinc-500 uppercase ml-2">{ws.role}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
 
               <div className="p-2">
                 <button
                   id="user-logout-button"
-                  onClick={() => {
-                    api.logout();
-                    const viewer = api.switchRoleSession('VIEWER');
+                  data-testid="user-logout-button"
+                  onClick={async () => {
+                    await api.logout();
+                    const viewer: User = {
+                      id: 4,
+                      username: 'viewer',
+                      email: 'viewer@devforge.internal',
+                      display_name: 'Viewer',
+                      role: 'VIEWER',
+                      is_active: true,
+                      status: 'active',
+                      permissions: ['view:all'],
+                      workspaces: [{ id: 1, name: 'Default Workspace', slug: 'default-workspace', role: 'VIEWER' }],
+                      active_workspace: { id: 1, name: 'Default Workspace', slug: 'default-workspace', role: 'VIEWER' }
+                    };
+                    setStoredUser(viewer);
                     setCurrentUser(viewer);
                     setShowUserMenu(false);
                   }}
-                  className="w-full text-left px-2.5 py-1.5 rounded text-rose-400 hover:bg-rose-950/30 hover:text-rose-300 transition text-[11px]"
+                  className="w-full text-left px-2.5 py-1.5 rounded text-rose-400 hover:bg-rose-950/30 hover:text-rose-300 transition text-[11px] cursor-pointer"
                 >
-                  Clear Session / Logout
+                  Sign Out
                 </button>
               </div>
             </div>

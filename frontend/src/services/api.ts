@@ -33,7 +33,13 @@ import {
   RemediationPolicy,
   User,
   Role,
-  TokenResponse
+  TokenResponse,
+  ApplicationTemplate,
+  TemplatePreviewResponse,
+  Workspace,
+  WorkspaceMember,
+  AddWorkspaceMemberPayload,
+  UserWorkspaceInfo
 } from '../types';
 import {
   SEED_APPLICATIONS,
@@ -55,13 +61,15 @@ import {
   SEED_CONTAINER_IMAGE,
   SEED_CI_STATUS,
   SEED_GITHUB_STATUS,
-  SEED_MANIFEST_YAML
+  SEED_MANIFEST_YAML,
+  SEED_TEMPLATES
 } from './seedData';
 
 const API_BASE = (import.meta as any).env?.VITE_API_BASE_URL || '/api/v1';
 
 const AUTH_TOKEN_KEY = 'devforge_auth_token';
 const AUTH_USER_KEY = 'devforge_auth_user';
+const ACTIVE_WORKSPACE_ID_KEY = 'devforge_active_workspace_id';
 
 export function getAuthToken(): string | null {
   try {
@@ -81,10 +89,34 @@ export function setAuthToken(token: string) {
   } catch {}
 }
 
+export function getActiveWorkspaceId(): number {
+  try {
+    const raw = localStorage.getItem(ACTIVE_WORKSPACE_ID_KEY);
+    if (raw && !isNaN(Number(raw))) {
+      return Number(raw);
+    }
+    const user = getStoredUser();
+    if (user.active_workspace?.id) {
+      return user.active_workspace.id;
+    }
+    if (user.workspaces && user.workspaces.length > 0) {
+      return user.workspaces[0].id;
+    }
+  } catch {}
+  return 1;
+}
+
+export function setActiveWorkspaceId(id: number) {
+  try {
+    localStorage.setItem(ACTIVE_WORKSPACE_ID_KEY, String(id));
+  } catch {}
+}
+
 export function clearAuthToken() {
   try {
     localStorage.removeItem(AUTH_TOKEN_KEY);
     localStorage.removeItem(AUTH_USER_KEY);
+    localStorage.removeItem(ACTIVE_WORKSPACE_ID_KEY);
   } catch {}
 }
 
@@ -99,9 +131,16 @@ export function getStoredUser(): User {
     id: 1,
     username: 'admin',
     email: 'admin@devforge.internal',
+    display_name: 'Platform Administrator',
     role: 'ADMIN',
     is_active: true,
-    permissions: ['view:all', 'deploy:trigger', 'infra:apply', 'remediation:approve', 'ansible:execute']
+    status: 'active',
+    workspaces: [
+      { id: 1, name: 'Default Workspace', slug: 'default-workspace', role: 'ADMIN' },
+      { id: 2, name: 'Staging Workspace', slug: 'staging-workspace', role: 'ADMIN' }
+    ],
+    active_workspace: { id: 1, name: 'Default Workspace', slug: 'default-workspace', role: 'ADMIN' },
+    permissions: ['view:all', 'deploy:trigger', 'infra:apply', 'remediation:approve', 'ansible:execute', 'workspace:manage', 'members:manage']
   };
 }
 
@@ -116,6 +155,10 @@ function getAuthHeaders(): Record<string, string> {
   const token = getAuthToken();
   if (token) {
     headers['Authorization'] = `Bearer ${token}`;
+  }
+  const wsId = getActiveWorkspaceId();
+  if (wsId) {
+    headers['X-Workspace-Id'] = String(wsId);
   }
   return headers;
 }
@@ -211,12 +254,66 @@ export const api = {
     return requestText(`${API_BASE}/applications/${idOrSlug}/manifest`, undefined, SEED_MANIFEST_YAML);
   },
 
+  // Templates
+  async getTemplates(): Promise<ApplicationTemplate[]> {
+    return requestJson(`${API_BASE}/templates`, undefined, SEED_TEMPLATES);
+  },
+
+  async getTemplate(id: string, version?: string): Promise<ApplicationTemplate> {
+    const qs = version ? `?version=${encodeURIComponent(version)}` : '';
+    const fallback = SEED_TEMPLATES.find(t => t.template_id === id) || SEED_TEMPLATES[0];
+    return requestJson(`${API_BASE}/templates/${id}${qs}`, undefined, fallback);
+  },
+
+  async validateTemplateConfig(id: string, data: { application_name: string; variables?: Record<string, any> }): Promise<{ valid: boolean; errors: string[]; warnings: string[] }> {
+    const fallback = {
+      valid: true,
+      errors: [] as string[],
+      warnings: [] as string[]
+    };
+    return requestJson(`${API_BASE}/templates/${id}/validate`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data)
+    }, fallback);
+  },
+
+  async previewTemplate(id: string, data: { application_name: string; environment?: string; variables?: Record<string, any> }): Promise<TemplatePreviewResponse> {
+    const template = SEED_TEMPLATES.find(t => t.template_id === id) || SEED_TEMPLATES[0];
+    const fallback: TemplatePreviewResponse = {
+      template_id: template.template_id,
+      template_name: template.name,
+      template_version: template.version,
+      runtime: template.runtime,
+      framework: template.framework,
+      application_name: data.application_name || 'my-app',
+      environment: data.environment || 'production',
+      files: template.generated_project_structure,
+      manifest_preview: `apiVersion: devforge/v1\nkind: ApplicationManifest\nmetadata:\n  name: "${data.application_name || 'my-app'}"\n  version: "${template.version}"`,
+      key_generated_components: [
+        'Main entrypoint and routing configuration',
+        'Standard health probe endpoints (/healthz, /ready)',
+        'Container build specification (Dockerfile, .dockerignore)',
+        'CI/CD workflow (.github/workflows/ci.yml)',
+        'Kubernetes deployment and service manifests',
+        'Automated test suite execution'
+      ]
+    };
+    return requestJson(`${API_BASE}/templates/${id}/preview`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data)
+    }, fallback);
+  },
+
   async createApplication(data: {
     name: string;
     description?: string;
     team?: string;
     runtime?: string;
     template?: string;
+    template_id?: string;
+    template_version?: string;
     repository_url?: string;
     branch?: string;
     environment?: string;
@@ -226,20 +323,25 @@ export const api = {
     port?: number;
     replicas?: number;
   }): Promise<ApplicationProvisioningResponse> {
+    const selectedTemplateId = data.template_id || data.template || 'python-fastapi';
+    const selectedTemplate = SEED_TEMPLATES.find(t => t.template_id === selectedTemplateId);
+
     const newApp: Application = {
       id: Date.now(),
       name: data.name,
       slug: data.name.toLowerCase().replace(/[^a-z0-9]+/g, '-'),
       description: data.description || '',
       team: data.team || 'Platform Engineering',
-      runtime: data.runtime || 'Python 3.12 (FastAPI)',
-      template: data.template || 'python-fastapi',
+      runtime: data.runtime || (selectedTemplate ? `${selectedTemplate.runtime} (${selectedTemplate.framework})` : 'Python 3.12 (FastAPI)'),
+      template: selectedTemplateId,
+      template_id: selectedTemplateId,
+      template_version: data.template_version || selectedTemplate?.version || '1.0.0',
       repository_url: data.repository_url || 'https://github.com/sripriyancsbs/DevForge',
       branch: data.branch || 'main',
       environment: data.environment || 'production',
       version: data.version || 'v1.0.0',
       status: 'healthy',
-      port: data.port || 8000,
+      port: data.port || selectedTemplate?.default_values?.port || 8000,
       replicas: data.replicas || 1,
       database_type: data.database_type,
       deployment_strategy: data.deployment_strategy || 'rolling',
@@ -250,7 +352,7 @@ export const api = {
     const fallback: ApplicationProvisioningResponse = {
       application: newApp,
       provisioning_status: 'READY',
-      files_generated: ['Dockerfile', 'main.py', 'requirements.txt'],
+      files_generated: selectedTemplate?.generated_project_structure || ['Dockerfile', 'main.py', 'requirements.txt'],
       message: 'Application provisioned successfully'
     };
     return requestJson(`${API_BASE}/applications`, {
@@ -897,6 +999,9 @@ export const api = {
       }, fallbackResponse);
       setAuthToken(res.access_token);
       setStoredUser(res.user);
+      if (res.user.active_workspace?.id) {
+        setActiveWorkspaceId(res.user.active_workspace.id);
+      }
       return res;
     } catch {
       setAuthToken(fallbackResponse.access_token);
@@ -914,6 +1019,103 @@ export const api = {
       await requestJson(`${API_BASE}/auth/logout`, { method: 'POST' });
     } catch {}
     clearAuthToken();
+  },
+
+  // Workspace & Membership Management (Phase 14)
+  async getWorkspaces(): Promise<Workspace[]> {
+    return requestJson<Workspace[]>(`${API_BASE}/workspaces`, undefined, [
+      {
+        id: 1,
+        name: 'Default Workspace',
+        slug: 'default-workspace',
+        description: 'Primary engineering workspace for core platform services',
+        status: 'active',
+        current_user_role: getStoredUser().role,
+        member_count: 4,
+        application_count: 5
+      },
+      {
+        id: 2,
+        name: 'Staging Workspace',
+        slug: 'staging-workspace',
+        description: 'Secondary isolated staging workspace for pre-release validation',
+        status: 'active',
+        current_user_role: getStoredUser().role,
+        member_count: 2,
+        application_count: 1
+      }
+    ]);
+  },
+
+  async getCurrentWorkspace(): Promise<Workspace> {
+    const activeId = getActiveWorkspaceId();
+    const url = activeId ? `${API_BASE}/workspaces/${activeId}` : `${API_BASE}/workspaces/current`;
+    return requestJson<Workspace>(url, undefined, {
+      id: 1,
+      name: 'Default Workspace',
+      slug: 'default-workspace',
+      description: 'Primary engineering workspace for core platform services',
+      status: 'active',
+      current_user_role: getStoredUser().role,
+      member_count: 4,
+      application_count: 5
+    });
+  },
+
+  async getWorkspaceMembers(workspaceId: number): Promise<WorkspaceMember[]> {
+    return requestJson<WorkspaceMember[]>(`${API_BASE}/workspaces/${workspaceId}/members`, undefined, [
+      { id: 1, workspace_id: workspaceId, user_id: 1, username: 'admin', email: 'admin@devforge.internal', display_name: 'Platform Administrator', role: 'ADMIN', status: 'active' },
+      { id: 2, workspace_id: workspaceId, user_id: 2, username: 'operator', email: 'operator@devforge.internal', display_name: 'Operator', role: 'OPERATOR', status: 'active' },
+      { id: 3, workspace_id: workspaceId, user_id: 3, username: 'developer', email: 'developer@devforge.internal', display_name: 'Developer', role: 'DEVELOPER', status: 'active' },
+      { id: 4, workspace_id: workspaceId, user_id: 4, username: 'viewer', email: 'viewer@devforge.internal', display_name: 'Viewer', role: 'VIEWER', status: 'active' }
+    ]);
+  },
+
+  async addWorkspaceMember(workspaceId: number, data: AddWorkspaceMemberPayload): Promise<WorkspaceMember> {
+    return requestJson<WorkspaceMember>(`${API_BASE}/workspaces/${workspaceId}/members`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data)
+    });
+  },
+
+  async updateWorkspaceMemberRole(workspaceId: number, memberId: number, role: string): Promise<WorkspaceMember> {
+    return requestJson<WorkspaceMember>(`${API_BASE}/workspaces/${workspaceId}/members/${memberId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ role })
+    });
+  },
+
+  async disableWorkspaceMember(workspaceId: number, memberId: number): Promise<{ status: string; message: string }> {
+    return requestJson<{ status: string; message: string }>(`${API_BASE}/workspaces/${workspaceId}/members/${memberId}`, {
+      method: 'DELETE'
+    });
+  },
+
+  async switchWorkspace(workspaceId: number): Promise<User> {
+    setActiveWorkspaceId(workspaceId);
+    try {
+      const refreshed = await requestJson<User>(`${API_BASE}/auth/me`, {
+        headers: { 'X-Workspace-Id': String(workspaceId) }
+      });
+      if (refreshed) {
+        setStoredUser(refreshed);
+        return refreshed;
+      }
+    } catch {}
+    const current = getStoredUser();
+    const ws = current.workspaces?.find(w => w.id === workspaceId);
+    if (ws) {
+      const updated: User = {
+        ...current,
+        role: ws.role as Role,
+        active_workspace: ws
+      };
+      setStoredUser(updated);
+      return updated;
+    }
+    return current;
   },
 
   switchRoleSession(role: Role): User {
