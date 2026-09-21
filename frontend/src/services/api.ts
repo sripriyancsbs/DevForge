@@ -1138,7 +1138,8 @@ export const api = {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email: cleanId, username: cleanId, password })
       });
-      if (res.ok) {
+      const contentType = res.headers.get('content-type') || '';
+      if (res.ok && contentType.includes('application/json')) {
         const data: TokenResponse = await res.json();
         setAuthToken(data.access_token);
         setStoredUser(data.user);
@@ -1146,18 +1147,18 @@ export const api = {
           setActiveWorkspaceId(data.user.active_workspace.id);
         }
         return data;
-      } else if (res.status === 401 || res.status === 400 || res.status === 403) {
+      } else if ((res.status === 401 || res.status === 400 || res.status === 403) && contentType.includes('application/json')) {
         const errData = await res.json().catch(() => ({}));
         throw new Error(errData.detail || 'Invalid email or password.');
-      } else if (res.status === 429) {
+      } else if (res.status === 429 && contentType.includes('application/json')) {
         const errData = await res.json().catch(() => ({}));
         throw new Error(errData.detail || 'Too many requests. Please wait a moment and try again.');
       } else {
-        const errData = await res.json().catch(() => ({}));
-        throw new Error(errData.detail || 'Failed to sign in.');
+        // Fallback for static hosting (e.g. Vercel SPA rewrite returning HTML) or backend unavailable
+        throw new Error('FALLBACK_OFFLINE_OR_STATIC');
       }
     } catch (err: any) {
-      if (err.message && (
+      if (err.message && err.message !== 'FALLBACK_OFFLINE_OR_STATIC' && (
         err.message.includes('Invalid') || 
         err.message.includes('Account is deactivated') || 
         err.message.includes('Contact system administrator') ||
@@ -1233,7 +1234,8 @@ export const api = {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name, email, password, confirm_password })
       });
-      if (res.ok) {
+      const contentType = res.headers.get('content-type') || '';
+      if (res.ok && contentType.includes('application/json')) {
         const data: TokenResponse = await res.json();
         setAuthToken(data.access_token);
         setStoredUser(data.user);
@@ -1241,12 +1243,21 @@ export const api = {
           setActiveWorkspaceId(data.user.active_workspace.id);
         }
         return data;
-      } else {
+      } else if ((res.status === 400 || res.status === 409 || res.status === 422) && contentType.includes('application/json')) {
         const errData = await res.json().catch(() => ({}));
         throw new Error(errData.detail || 'Failed to sign up.');
+      } else if (res.status === 429 && contentType.includes('application/json')) {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.detail || 'Too many requests. Please wait a moment and try again.');
+      } else {
+        // Fallback for static hosting (e.g. Vercel SPA rewrite returning HTML) or backend unavailable
+        throw new Error('FALLBACK_OFFLINE_OR_STATIC');
       }
     } catch (err: any) {
-      if (err.message && !err.message.includes('Failed to fetch') && !err.message.includes('NetworkError') && !err.message.includes('Load failed')) {
+      if (err.message !== 'FALLBACK_OFFLINE_OR_STATIC' && 
+          !err.message.includes('Failed to fetch') && 
+          !err.message.includes('NetworkError') && 
+          !err.message.includes('Load failed')) {
         throw err;
       }
       const registered = getStoredRegisteredUsers();
@@ -1304,12 +1315,13 @@ export const api = {
       const res = await fetch(`${API_BASE}/auth/me`, {
         headers: getAuthHeaders()
       });
-      if (res.ok) {
+      const contentType = res.headers.get('content-type') || '';
+      if (res.ok && contentType.includes('application/json')) {
         const user: User = await res.json();
         setStoredUser(user);
         return user;
       }
-      if (res.status === 401) {
+      if (res.status === 401 && contentType.includes('application/json')) {
         clearAuthToken();
         return null;
       }
