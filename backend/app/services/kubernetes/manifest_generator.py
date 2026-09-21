@@ -32,7 +32,7 @@ TEMPLATE_METADATA = {
     },
     "go-microservice": {
         "port": 8080,
-        "health_path": "/healthz",
+        "health_path": "/health",
         "probe_initial_delay": 3,
         "probe_period": 10,
     },

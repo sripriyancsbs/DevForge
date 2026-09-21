@@ -232,7 +232,7 @@ class ProjectGenerator:
                 application_id=eff_app_id,
                 app_name=eff_name,
                 project_dir=resolved_target,
-                relative_path=f"app_{eff_app_id}" if target_dir is None else str(resolved_target),
+                relative_path=f".devforge/generated/app_{eff_app_id}" if target_dir is None else str(resolved_target),
                 manifest_yaml=manifest_yaml,
                 files_generated=sorted(list(set(created_files)))
             )
