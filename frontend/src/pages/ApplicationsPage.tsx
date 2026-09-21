@@ -3,14 +3,7 @@ import {
   Search,
   Plus,
   Box,
-  GitBranch,
-  ExternalLink,
   Play,
-  CheckCircle2,
-  AlertTriangle,
-  XCircle,
-  Clock,
-  Layers,
   ArrowRight
 } from 'lucide-react';
 import { Application } from '../types';
@@ -129,29 +122,26 @@ export const ApplicationsPage: React.FC<ApplicationsPageProps> = ({
       {/* Applications Catalog List */}
       <div className="border border-zinc-800 bg-[#121215] rounded-md overflow-hidden min-w-0 w-full">
         <div className="overflow-x-auto w-full" tabIndex={0} role="region" aria-label="Applications Catalog Table">
-          <table className="w-full text-left text-xs min-w-[720px] lg:min-w-full">
-            <thead className="bg-[#0e0e11] border-b border-zinc-800 text-[11px] font-mono uppercase text-zinc-400">
+          <table className="w-full text-left text-xs table-auto">
+            <thead className="hidden lg:table-header-group bg-[#0e0e11] border-b border-zinc-800 text-[11px] font-mono uppercase text-zinc-400">
               <tr>
-                <th className="py-2.5 px-3 sm:px-4 font-medium">Application</th>
-                <th className="py-2.5 px-3 sm:px-4 font-medium">Technology</th>
-                <th className="py-2.5 px-3 sm:px-4 font-medium">Repository</th>
-                <th className="py-2.5 px-3 sm:px-4 font-medium">Environment</th>
-                <th className="py-2.5 px-3 sm:px-4 font-medium">Version</th>
-                <th className="py-2.5 px-3 sm:px-4 font-medium">Status</th>
-                <th className="py-2.5 px-3 sm:px-4 font-medium">Last Deployment</th>
-                <th className="py-2.5 px-3 sm:px-4 font-medium text-right">Actions</th>
+                <th className="py-2.5 px-3 sm:px-4 font-medium lg:w-5/12">Application</th>
+                <th className="py-2.5 px-3 sm:px-4 font-medium lg:w-2/12">Technology</th>
+                <th className="py-2.5 px-3 sm:px-4 font-medium lg:w-2/12">Environment</th>
+                <th className="py-2.5 px-3 sm:px-4 font-medium lg:w-1/12">Status</th>
+                <th className="py-2.5 px-3 sm:px-4 font-medium text-right lg:w-2/12">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-zinc-800/60 font-mono">
               {loading && applications.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="py-8 text-center text-zinc-500">
+                  <td colSpan={5} className="py-8 text-center text-zinc-500">
                     Loading applications...
                   </td>
                 </tr>
               ) : filteredApps.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="py-8 text-center text-zinc-500">
+                  <td colSpan={5} className="py-8 text-center text-zinc-500">
                     No applications matched your search filters.
                   </td>
                 </tr>
@@ -160,19 +150,19 @@ export const ApplicationsPage: React.FC<ApplicationsPageProps> = ({
                   <tr
                     key={app.id}
                     onClick={() => onSelectApplication(app.name)}
-                    className="hover:bg-zinc-800/40 cursor-pointer transition group"
+                    className="hover:bg-zinc-800/40 cursor-pointer transition group block lg:table-row p-3.5 lg:p-0"
                   >
-                    {/* Application Name & Description */}
-                    <td className="py-3 px-3 sm:px-4">
+                    {/* 1. Application Name & Description (Largest available width) */}
+                    <td className="block lg:table-cell py-1.5 lg:py-3 px-0 lg:px-4 lg:w-5/12">
                       <div className="flex items-center gap-2.5 min-w-0">
                         <Box className="w-4 h-4 text-zinc-500 group-hover:text-emerald-400 transition shrink-0" />
-                        <div className="min-w-0">
+                        <div className="min-w-0 flex-1">
                           <div className="font-semibold text-white font-mono group-hover:text-emerald-400 transition flex items-center gap-1.5">
-                            <span className="whitespace-nowrap">{app.name}</span>
-                            <ArrowRight className="w-3 h-3 text-zinc-600 group-hover:text-emerald-400 opacity-0 group-hover:opacity-100 transition shrink-0" />
+                            <span>{app.name}</span>
+                            <ArrowRight className="w-3 h-3 text-zinc-600 group-hover:text-emerald-400 opacity-0 group-hover:opacity-100 transition shrink-0 hidden sm:inline" />
                           </div>
                           {app.description ? (
-                            <div className="text-[11px] text-zinc-400 truncate max-w-xs sm:max-w-sm font-sans mt-0.5">
+                            <div className="text-[11px] text-zinc-400 truncate max-w-sm sm:max-w-md font-sans mt-0.5">
                               {app.description}
                             </div>
                           ) : (
@@ -182,66 +172,28 @@ export const ApplicationsPage: React.FC<ApplicationsPageProps> = ({
                       </div>
                     </td>
 
-                    {/* Runtime / Technology */}
-                    <td className="py-3 px-3 sm:px-4 text-zinc-300">
-                      <span className="bg-zinc-950 border border-zinc-800 px-2 py-0.5 rounded text-[11px] whitespace-nowrap">
+                    {/* 2. Technology / Runtime */}
+                    <td className="inline-block lg:table-cell py-1 lg:py-3 px-0 lg:px-4 mr-2 lg:mr-0 align-middle lg:w-2/12">
+                      <span className="bg-zinc-950 border border-zinc-800 px-2 py-0.5 rounded text-[11px] text-zinc-300 whitespace-nowrap">
                         {app.runtime}
                       </span>
                     </td>
 
-                    {/* Repository */}
-                    <td className="py-3 px-3 sm:px-4 text-zinc-400">
-                      {app.repository_url ? (
-                        <a
-                          href={app.repository_url}
-                          target="_blank"
-                          rel="noreferrer"
-                          onClick={(e) => e.stopPropagation()}
-                          className="hover:text-zinc-200 inline-flex items-center gap-1 max-w-[160px] truncate"
-                          title={app.repository_url}
-                        >
-                          <GitBranch className="w-3 h-3 shrink-0" />
-                          <span className="truncate">{app.repository_url.replace('https://github.com/', '')}</span>
-                        </a>
-                      ) : (
-                        <span className="text-zinc-600">—</span>
-                      )}
-                    </td>
-
-                    {/* Environment */}
-                    <td className="py-3 px-3 sm:px-4">
+                    {/* 3. Environment */}
+                    <td className="inline-block lg:table-cell py-1 lg:py-3 px-0 lg:px-4 mr-2 lg:mr-0 align-middle lg:w-2/12">
                       <span className="capitalize text-zinc-300 bg-zinc-900 border border-zinc-800/80 px-2 py-0.5 rounded text-[11px] whitespace-nowrap">
                         {app.environment}
                       </span>
                     </td>
 
-                    {/* Version */}
-                    <td className="py-3 px-3 sm:px-4 text-zinc-300">
-                      <span className="bg-zinc-800 px-1.5 py-0.5 rounded border border-zinc-700/60 text-zinc-200 text-[11px] whitespace-nowrap">
-                        {app.version}
-                      </span>
-                    </td>
-
-                    {/* Status */}
-                    <td className="py-3 px-3 sm:px-4">
+                    {/* 4. Status */}
+                    <td className="inline-block lg:table-cell py-1 lg:py-3 px-0 lg:px-4 mr-2 lg:mr-0 align-middle lg:w-1/12">
                       <StatusBadge status={app.status} />
                     </td>
 
-                    {/* Last Deployment */}
-                    <td className="py-3 px-3 sm:px-4 text-zinc-400 text-[11px] whitespace-nowrap">
-                      {app.last_deployment_at
-                        ? new Date(app.last_deployment_at).toLocaleString([], {
-                            month: 'short',
-                            day: 'numeric',
-                            hour: '2-digit',
-                            minute: '2-digit'
-                          })
-                        : 'Never'}
-                    </td>
-
-                    {/* Actions */}
-                    <td className="py-3 px-3 sm:px-4 text-right whitespace-nowrap">
-                      <div className="flex items-center justify-end gap-1.5" onClick={(e) => e.stopPropagation()}>
+                    {/* 5. Actions */}
+                    <td className="block lg:table-cell py-2 lg:py-3 px-0 lg:px-4 text-left lg:text-right border-t border-zinc-800/40 lg:border-t-0 pt-2 lg:pt-0 mt-2 lg:mt-0 whitespace-nowrap lg:w-2/12">
+                      <div className="flex items-center justify-start lg:justify-end gap-1.5" onClick={(e) => e.stopPropagation()}>
                         <button
                           onClick={() => onSelectApplication(app.name)}
                           className="px-2.5 py-1 rounded bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-[11px] border border-zinc-700 transition"

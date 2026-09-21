@@ -8,8 +8,15 @@ def setup():
     res = subprocess.run(["wsl", "-d", "Ubuntu", "-u", "root", "cat", "/root/.kube/config"], capture_output=True, text=True, check=True)
     cfg = yaml.safe_load(res.stdout)
 
+    import json
+    # Detect devforge-control-plane IP on devforge-network
+    ip_res = subprocess.run(["wsl", "-d", "Ubuntu", "-u", "root", "docker", "inspect", "devforge-control-plane", "--format", "{{json .NetworkSettings.Networks}}"], capture_output=True, text=True, check=True)
+    networks = json.loads(ip_res.stdout)
+    k8s_ip = networks.get("devforge_devforge-network", {}).get("IPAddress") or "172.18.0.3"
+    print(f"Detected devforge-control-plane IP: {k8s_ip}")
+
     # Update server URL to container IP on devforge network
-    cfg["clusters"][0]["cluster"]["server"] = "https://172.18.0.5:6443"
+    cfg["clusters"][0]["cluster"]["server"] = f"https://{k8s_ip}:6443"
     cfg["clusters"][0]["cluster"]["insecure-skip-tls-verify"] = True
     if "certificate-authority-data" in cfg["clusters"][0]["cluster"]:
         del cfg["clusters"][0]["cluster"]["certificate-authority-data"]
