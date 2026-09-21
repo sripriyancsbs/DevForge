@@ -193,8 +193,10 @@ export const TopNav: React.FC<TopNavProps> = ({
       {/* Right section: Action CTA, Notifications, Profile */}
       <div className="flex items-center gap-2 sm:gap-3">
         <button
+          id="top-nav-create-app-btn"
+          data-testid="top-nav-create-app-btn"
           onClick={onNavigateToCreate}
-          className="hidden md:flex items-center gap-1.5 bg-zinc-100 hover:bg-white text-zinc-950 px-2.5 py-1.5 rounded text-xs font-medium transition shadow-xs"
+          className="hidden md:flex items-center gap-1.5 bg-zinc-100 hover:bg-white text-zinc-950 px-2.5 py-1.5 rounded text-xs font-medium transition shadow-xs cursor-pointer"
         >
           <Plus className="w-3.5 h-3.5" />
           <span>New App</span>

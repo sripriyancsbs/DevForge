@@ -2045,9 +2045,11 @@ spec:
                   Cancel
                 </button>
                 <button
+                  id="modal-redeploy-submit-btn"
+                  data-testid="modal-redeploy-submit-btn"
                   type="submit"
                   disabled={isSubmittingDeploy}
-                  className="px-3 py-1.5 rounded bg-emerald-600 hover:bg-emerald-500 text-white font-medium transition"
+                  className="px-3 py-1.5 rounded bg-emerald-600 hover:bg-emerald-500 text-white font-medium transition cursor-pointer"
                 >
                   {isSubmittingDeploy ? 'Deploying...' : 'Initiate Rollout'}
                 </button>

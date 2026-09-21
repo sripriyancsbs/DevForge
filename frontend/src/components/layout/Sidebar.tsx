@@ -88,6 +88,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
             return (
               <button
                 key={item.id}
+                id={`sidebar-nav-${item.id}`}
+                data-testid={`sidebar-nav-${item.id}`}
                 onClick={() => {
                   onSelectTab(item.id);
                   onCloseMobile();

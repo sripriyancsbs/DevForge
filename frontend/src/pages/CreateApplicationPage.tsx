@@ -637,6 +637,7 @@ export const CreateApplicationPage: React.FC<CreateApplicationPageProps> = ({
                   <input
                     type="text"
                     required
+                    id="app-name-input"
                     data-testid="input-app-name"
                     placeholder="e.g. order-processing-service"
                     value={name}
@@ -669,6 +670,8 @@ export const CreateApplicationPage: React.FC<CreateApplicationPageProps> = ({
                   </label>
                   <textarea
                     rows={2}
+                    id="app-desc-input"
+                    data-testid="app-desc-input"
                     placeholder="Brief architectural summary of this service..."
                     value={description}
                     onChange={(e) => setDescription(e.target.value)}
@@ -706,6 +709,8 @@ export const CreateApplicationPage: React.FC<CreateApplicationPageProps> = ({
                 <div className="pt-2 flex justify-end">
                   <button
                     type="button"
+                    id="btn-next-step-2"
+                    data-testid="btn-next-step-2"
                     onClick={() => {
                       if (validateName(name)) {
                         setStep(2);
@@ -781,6 +786,8 @@ export const CreateApplicationPage: React.FC<CreateApplicationPageProps> = ({
                   </button>
                   <button
                     type="button"
+                    id="btn-next-step-3"
+                    data-testid="btn-next-step-3"
                     onClick={() => setStep(3)}
                     className="px-4 py-2 bg-zinc-100 hover:bg-white text-zinc-950 text-xs font-semibold rounded transition"
                   >
@@ -898,6 +905,7 @@ export const CreateApplicationPage: React.FC<CreateApplicationPageProps> = ({
                   </button>
                   <button
                     type="submit"
+                    id="btn-provision-submit"
                     data-testid="create-app-submit"
                     className="px-5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold rounded transition shadow-sm flex items-center gap-1.5"
                   >
