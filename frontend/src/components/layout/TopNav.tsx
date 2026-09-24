@@ -10,7 +10,8 @@ import {
   Plus,
   ArrowRight,
   Wrench,
-  ChevronDown
+  ChevronDown,
+  Zap
 } from 'lucide-react';
 import { OverviewData, RemediationEvent, User } from '../../types';
 import { api, getStoredUser, setStoredUser } from '../../services/api';
@@ -24,6 +25,7 @@ interface TopNavProps {
   onLogout: () => void;
   onNavigateToSignIn: () => void;
   onNavigateToSignUp: () => void;
+  onOpenConnections?: () => void;
 }
 
 const formatRelativeTime = (isoString?: string): string => {
@@ -48,7 +50,8 @@ export const TopNav: React.FC<TopNavProps> = ({
   currentUser,
   onLogout,
   onNavigateToSignIn,
-  onNavigateToSignUp
+  onNavigateToSignUp,
+  onOpenConnections
 }) => {
   const [showNotifications, setShowNotifications] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
@@ -232,6 +235,19 @@ export const TopNav: React.FC<TopNavProps> = ({
 
       {/* Right section: Action CTA, Notifications, Profile */}
       <div className="flex items-center gap-2 sm:gap-3">
+        {onOpenConnections && (
+          <button
+            id="top-nav-connections-btn"
+            data-testid="top-nav-connections-btn"
+            onClick={onOpenConnections}
+            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded text-xs font-mono text-zinc-300 hover:text-white bg-zinc-900 border border-zinc-800 hover:border-emerald-500/50 transition cursor-pointer"
+            title="Configure Cloud Connections (GitHub, Vercel, Neon DB)"
+          >
+            <Zap className="w-3.5 h-3.5 text-emerald-400" />
+            <span className="hidden sm:inline">Connections</span>
+          </button>
+        )}
+
         <button
           id="top-nav-create-app-btn"
           data-testid="top-nav-create-app-btn"

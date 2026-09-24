@@ -9,6 +9,8 @@ import { ActivityPage } from './pages/ActivityPage';
 import { SettingsPage } from './pages/SettingsPage';
 import { SignInPage } from './pages/SignInPage';
 import { SignUpPage } from './pages/SignUpPage';
+import { ConnectionsModal } from './components/ConnectionsModal';
+import { hasCompletedConnectionsOnboarding } from './services/integrationsService';
 import { api, getAuthToken, getStoredUser, setStoredUser, clearAuthToken } from './services/api';
 import { Application, Deployment, Environment, OverviewData, User } from './types';
 import { ArrowLeft, AlertCircle } from 'lucide-react';
@@ -110,6 +112,7 @@ export const App: React.FC = () => {
 
   // Global Notification / Toast
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [showConnectionsModal, setShowConnectionsModal] = useState(false);
 
   const showToast = (msg: string) => {
     setToastMessage(msg);
@@ -251,6 +254,8 @@ export const App: React.FC = () => {
     setStoredUser(user);
     loadPlatformData();
     navigateToRoute({ view: 'overview' });
+    // After sign in, immediately prompt for connections (GitHub, Vercel, Neon DB)
+    setShowConnectionsModal(true);
   };
 
   // Synchronize active application when route changes to application-detail
@@ -422,6 +427,7 @@ export const App: React.FC = () => {
           onLogout={handleLogout}
           onNavigateToSignIn={() => navigateToRoute({ view: 'signin' })}
           onNavigateToSignUp={() => navigateToRoute({ view: 'signup' })}
+          onOpenConnections={() => setShowConnectionsModal(true)}
         />
 
         {/* Global Action Toast Banner */}
@@ -526,6 +532,11 @@ export const App: React.FC = () => {
           {/* 6. Settings */}
           {route.view === 'settings' && <SettingsPage />}
         </main>
+        {/* Modal for Platform Integrations */}
+        <ConnectionsModal
+          isOpen={showConnectionsModal}
+          onClose={() => setShowConnectionsModal(false)}
+        />
       </div>
     </div>
   );

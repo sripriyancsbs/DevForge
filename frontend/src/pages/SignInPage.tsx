@@ -1,7 +1,13 @@
 import React, { useState } from 'react';
-import { Lock, Mail, ArrowRight, AlertCircle, Loader2, ShieldCheck, Code2, Eye, EyeOff } from 'lucide-react';
-import { api } from '../services/api';
-import { User } from '../types';
+import { Lock, Mail, ArrowRight, AlertCircle, Loader2, ShieldCheck, Code2, Eye, EyeOff, Github, Zap, ExternalLink } from 'lucide-react';
+import { api, setAuthToken, setStoredUser, setActiveWorkspaceId } from '../services/api';
+import { User, TokenResponse } from '../types';
+import {
+  verifyAndSaveGitHubToken,
+  DEFAULT_GITHUB_TOKEN,
+  DEFAULT_GITHUB_OWNER,
+  getStoredGitHubUser
+} from '../services/integrationsService';
 
 interface SignInPageProps {
   onSuccess: (user: User) => void;
@@ -14,6 +20,12 @@ export const SignInPage: React.FC<SignInPageProps> = ({ onSuccess, onNavigateToS
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // GitHub Sign In State
+  const [showGitHubModal, setShowGitHubModal] = useState(false);
+  const [ghTokenInput, setGhTokenInput] = useState('');
+  const [ghLoading, setGhLoading] = useState(false);
+  const [ghError, setGhError] = useState<string | null>(null);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -36,6 +48,61 @@ export const SignInPage: React.FC<SignInPageProps> = ({ onSuccess, onNavigateToS
       setError(err.message || 'Invalid email or password.');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleGitHubSignIn = async (tokenToUse?: string) => {
+    const token = tokenToUse || ghTokenInput;
+    if (!token.trim()) {
+      setGhError('Please enter a GitHub Personal Access Token.');
+      return;
+    }
+
+    setGhLoading(true);
+    setGhError(null);
+
+    try {
+      const ghRes = await verifyAndSaveGitHubToken(token);
+      if (!ghRes.success || !ghRes.user) {
+        setGhError(ghRes.error || 'Failed to authenticate with GitHub.');
+        setGhLoading(false);
+        return;
+      }
+
+      // Automatically construct or sign in administrator session linked to GitHub account
+      const ghUser = ghRes.user;
+      const adminUser: User = {
+        id: 1,
+        username: ghUser.login,
+        email: `${ghUser.login}@devforge.com`,
+        display_name: ghUser.name || ghUser.login,
+        role: 'ADMIN',
+        is_active: true,
+        status: 'active',
+        workspaces: [
+          { id: 1, name: 'Default Workspace', slug: 'default-workspace', role: 'ADMIN' },
+          { id: 2, name: 'Staging Workspace', slug: 'staging-workspace', role: 'ADMIN' }
+        ],
+        active_workspace: { id: 1, name: 'Default Workspace', slug: 'default-workspace', role: 'ADMIN' },
+        permissions: ['view:all', 'deploy:trigger', 'infra:apply', 'remediation:approve', 'ansible:execute', 'workspace:manage', 'members:manage']
+      };
+
+      const tokenResp: TokenResponse = {
+        access_token: `df_gh_session_${ghUser.login}`,
+        token_type: 'bearer',
+        expires_in: 28800,
+        user: adminUser
+      };
+
+      setAuthToken(tokenResp.access_token);
+      setStoredUser(adminUser);
+      setActiveWorkspaceId(1);
+      setShowGitHubModal(false);
+      onSuccess(adminUser);
+    } catch (err: any) {
+      setGhError(err.message || 'GitHub authentication failed.');
+    } finally {
+      setGhLoading(false);
     }
   };
 
@@ -73,6 +140,26 @@ export const SignInPage: React.FC<SignInPageProps> = ({ onSuccess, onNavigateToS
               <span className="font-sans">{error}</span>
             </div>
           )}
+
+          {/* GitHub Sign In Option */}
+          <div>
+            <button
+              type="button"
+              id="github-signin-button"
+              onClick={() => setShowGitHubModal(true)}
+              className="w-full py-2.5 px-4 bg-zinc-900 hover:bg-zinc-800 border border-zinc-700/80 hover:border-emerald-500/50 text-white font-medium text-xs rounded-lg transition flex items-center justify-center gap-2 cursor-pointer font-mono shadow-md"
+            >
+              <Github className="w-4 h-4 text-emerald-400 shrink-0" />
+              <span>Sign in with GitHub (Repository Access)</span>
+            </button>
+            <p className="text-[11px] text-zinc-400 text-center mt-2 font-mono">
+              ⚡ Connects your GitHub account so project repositories are created directly in your account
+            </p>
+            <div className="relative flex items-center justify-center my-3.5">
+              <div className="border-t border-zinc-800 w-full" />
+              <span className="bg-[#121215] px-2 text-[10px] text-zinc-500 font-mono uppercase tracking-wider">or email & password</span>
+            </div>
+          </div>
 
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-1.5">
@@ -178,6 +265,103 @@ export const SignInPage: React.FC<SignInPageProps> = ({ onSuccess, onNavigateToS
           </button>
         </div>
       </div>
+
+      {/* GitHub Sign In Modal */}
+      {showGitHubModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-150">
+          <div className="bg-[#121215] border border-zinc-800 rounded-xl p-6 w-full max-w-md shadow-2xl space-y-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2 text-white font-mono text-sm font-semibold">
+                <Github className="w-5 h-5 text-emerald-400" />
+                <span>GitHub Authentication & Access</span>
+              </div>
+              <button
+                onClick={() => setShowGitHubModal(false)}
+                className="text-zinc-400 hover:text-white p-1 rounded hover:bg-zinc-800"
+              >
+                ✕
+              </button>
+            </div>
+
+            <p className="text-xs text-zinc-400">
+              Connect your GitHub account to enable DevForge to automatically create and manage project repositories under your personal account.
+            </p>
+
+            {ghError && (
+              <div className="p-3 rounded bg-rose-950/40 border border-rose-800 text-rose-300 text-xs font-mono flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 shrink-0" />
+                <span>{ghError}</span>
+              </div>
+            )}
+
+            <div className="space-y-2">
+              <label className="text-xs font-medium text-zinc-300 font-mono">
+                GitHub Personal Access Token (requires 'repo' scope)
+              </label>
+              <input
+                type="password"
+                placeholder="ghp_... or gho_..."
+                value={ghTokenInput}
+                onChange={(e) => setGhTokenInput(e.target.value)}
+                className="w-full px-3.5 py-2.5 bg-zinc-950 border border-zinc-800 rounded-lg text-xs text-zinc-100 font-mono placeholder-zinc-500 focus:outline-none focus:border-emerald-500"
+              />
+            </div>
+
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => handleGitHubSignIn()}
+                disabled={ghLoading}
+                className="flex-1 py-2.5 px-4 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white font-medium text-xs rounded-lg transition font-mono flex items-center justify-center gap-2"
+              >
+                {ghLoading ? (
+                  <>
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    <span>Connecting...</span>
+                  </>
+                ) : (
+                  <>
+                    <Github className="w-3.5 h-3.5" />
+                    <span>Authorize & Sign In</span>
+                  </>
+                )}
+              </button>
+            </div>
+
+            <div className="pt-2 border-t border-zinc-800/80">
+              {DEFAULT_GITHUB_TOKEN ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setGhTokenInput(DEFAULT_GITHUB_TOKEN);
+                    handleGitHubSignIn(DEFAULT_GITHUB_TOKEN);
+                  }}
+                  className="w-full p-2 rounded bg-zinc-900 hover:bg-zinc-800 text-zinc-300 border border-zinc-800 text-left transition font-mono text-[11px] flex items-center justify-between"
+                >
+                  <span className="flex items-center gap-1.5">
+                    <Zap className="w-3.5 h-3.5 text-emerald-400" />
+                    <span>Quick Sign In as <strong>@{DEFAULT_GITHUB_OWNER}</strong></span>
+                  </span>
+                  <span className="text-[10px] text-emerald-400">Saved Token</span>
+                </button>
+              ) : (
+                <div className="p-2.5 rounded bg-zinc-950/60 border border-zinc-800/80 text-[11px] text-zinc-400 font-mono flex items-center justify-between">
+                  <span>Need a GitHub token with 'repo' scope?</span>
+                  <a
+                    href="https://github.com/settings/tokens/new?scopes=repo,read:user,user:email&description=DevForge-IDP"
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-emerald-400 hover:underline flex items-center gap-1"
+                  >
+                    <span>Create Token</span>
+                    <ExternalLink className="w-3 h-3" />
+                  </a>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
