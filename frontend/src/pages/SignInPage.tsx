@@ -127,6 +127,7 @@ export const SignInPage: React.FC<SignInPageProps> = ({ onSuccess, onNavigateToS
             <button
               id="signin-submit-btn"
               data-testid="signin-submit-btn"
+              name="auth-form-submit-button"
               type="submit"
               disabled={loading}
               className="w-full mt-2 py-2.5 px-4 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white font-medium text-xs rounded-lg transition shadow-lg shadow-emerald-950/40 flex items-center justify-center gap-2 cursor-pointer font-mono"
@@ -145,50 +146,22 @@ export const SignInPage: React.FC<SignInPageProps> = ({ onSuccess, onNavigateToS
             </button>
           </form>
 
-          {/* Role testing quick-fill section */}
+          {/* Single Bootstrap Administrator hint */}
           <div className="pt-3 border-t border-zinc-800/80 space-y-2">
             <div className="text-[11px] font-mono text-zinc-500 flex items-center justify-between">
-              <span>Test Credentials (RBAC Testing):</span>
+              <span>Default Administrator:</span>
               <ShieldCheck className="w-3 h-3 text-zinc-500" />
             </div>
-            <div className="grid grid-cols-2 gap-1.5 text-[10px] font-mono">
-              <button
-                type="button"
-                id="demo-account-admin"
-                data-testid="demo-account-admin"
-                onClick={() => handleQuickFill('admin@devforge.internal', 'AdminPassword123!')}
-                className="p-1.5 rounded bg-zinc-900/80 hover:bg-zinc-800 text-zinc-300 border border-zinc-800 text-left transition truncate cursor-pointer"
-              >
-                👑 <strong className="text-violet-400">ADMIN</strong> (admin)
-              </button>
-              <button
-                type="button"
-                id="demo-account-operator"
-                data-testid="demo-account-operator"
-                onClick={() => handleQuickFill('operator@devforge.internal', 'OperatorPassword123!')}
-                className="p-1.5 rounded bg-zinc-900/80 hover:bg-zinc-800 text-zinc-300 border border-zinc-800 text-left transition truncate cursor-pointer"
-              >
-                ⚙️ <strong className="text-emerald-400">OPERATOR</strong> (operator)
-              </button>
-              <button
-                type="button"
-                id="demo-account-developer"
-                data-testid="demo-account-developer"
-                onClick={() => handleQuickFill('developer@devforge.internal', 'DeveloperPassword123!')}
-                className="p-1.5 rounded bg-zinc-900/80 hover:bg-zinc-800 text-zinc-300 border border-zinc-800 text-left transition truncate cursor-pointer"
-              >
-                💻 <strong className="text-amber-400">DEVELOPER</strong> (developer)
-              </button>
-              <button
-                type="button"
-                id="demo-account-viewer"
-                data-testid="demo-account-viewer"
-                onClick={() => handleQuickFill('viewer@devforge.internal', 'ViewerPassword123!')}
-                className="p-1.5 rounded bg-zinc-900/80 hover:bg-zinc-800 text-zinc-300 border border-zinc-800 text-left transition truncate cursor-pointer"
-              >
-                👁️ <strong className="text-zinc-400">VIEWER</strong> (viewer)
-              </button>
-            </div>
+            <button
+              type="button"
+              id="bootstrap-admin-fill"
+              data-testid="bootstrap-admin-fill"
+              onClick={() => handleQuickFill('admin@devforge.com', 'pass123')}
+              className="w-full p-2 rounded bg-zinc-900/80 hover:bg-zinc-800 text-zinc-300 border border-zinc-800 text-left transition font-mono text-[11px] cursor-pointer flex items-center justify-between"
+            >
+              <span>👑 <strong className="text-violet-400">ADMIN</strong> (admin@devforge.com)</span>
+              <span className="text-[10px] text-zinc-500">Quick Fill</span>
+            </button>
           </div>
         </div>
 

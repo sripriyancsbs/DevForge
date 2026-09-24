@@ -205,8 +205,8 @@ def signup(
         counter += 1
 
     # Security requirement: Newly registered accounts must NOT automatically become ADMIN.
-    # Initial role determined by application's actual workspace policy: safest appropriate default role is DEVELOPER.
-    initial_role = "DEVELOPER"
+    # Initial role determined by application's actual workspace policy: safest appropriate default role is VIEWER.
+    initial_role = "VIEWER"
 
     hashed_pw = hash_password(payload.password)
 

@@ -155,8 +155,7 @@ def run_worker_loop():
 
     try:
         verify_connection()
-        run_phase2_migrations()
-        logger.info("Database connectivity and schema migrations verified.")
+        logger.info("Database connectivity verified.")
     except Exception as e:
         logger.error(f"Failed to initialize worker database connection: {e}")
         sys.exit(1)

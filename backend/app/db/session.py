@@ -353,9 +353,18 @@ def run_phase2_migrations():
         "CREATE INDEX IF NOT EXISTS ix_applications_workspace_id ON applications (workspace_id);"
     ]
     try:
-        with engine.begin() as conn:
-            for stmt in migration_statements:
-                conn.execute(text(stmt))
+        with engine.connect() as conn:
+            has_workspace_id = conn.execute(text(
+                "SELECT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'applications' AND column_name = 'workspace_id')"
+            )).scalar()
+
+            if not has_workspace_id:
+                for stmt in migration_statements:
+                    try:
+                        conn.execute(text(stmt))
+                        conn.commit()
+                    except Exception as me:
+                        logger.warning(f"Migration statement notice: {me}")
 
             # Seed default remediation policies if empty
             count = conn.execute(text("SELECT count(*) FROM remediation_policies")).scalar()

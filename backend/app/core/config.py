@@ -1,6 +1,14 @@
 import os
+from pathlib import Path
 from typing import List
+from dotenv import load_dotenv
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+# Automatically load .env from project root or environment
+root_env = Path(__file__).resolve().parent.parent.parent.parent / ".env"
+if root_env.is_file():
+    load_dotenv(dotenv_path=root_env)
+load_dotenv()
 
 class Settings(BaseSettings):
     PROJECT_NAME: str = "DevForge Internal Developer Platform"

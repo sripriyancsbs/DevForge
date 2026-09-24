@@ -9,40 +9,55 @@ from app.models.user import User
 from app.core.security import hash_password
 
 def seed_users(db: Session):
-    """Ensure baseline platform users exist with secure PBKDF2 hashed passwords."""
+    """
+    Ensure the single bootstrap administrator account exists with PBKDF2 hashed password,
+    strictly creating it only if it does not already exist (Section 8). Demo users are omitted.
+    """
+    import os
+    from app.models.workspace import Workspace
+    from app.models.workspace_member import WorkspaceMember
+
     try:
-        if db.query(User).count() == 0:
-            users_data = [
-                User(
-                    username="admin",
-                    email="admin@devforge.internal",
-                    hashed_password=hash_password("AdminPassword123!"),
+        admin_email = os.getenv("BOOTSTRAP_ADMIN_EMAIL", "admin@devforge.com").strip().lower()
+        existing = db.query(User).filter(User.email == admin_email).first()
+        if not existing:
+            admin_pwd = os.getenv("BOOTSTRAP_ADMIN_PASSWORD", "pass123")
+            admin_user = User(
+                username=admin_email.split("@")[0],
+                email=admin_email,
+                display_name="DevForge Administrator",
+                hashed_password=hash_password(admin_pwd),
+                role="ADMIN",
+                is_active=True,
+                status="active"
+            )
+            db.add(admin_user)
+            db.flush()
+
+            # Ensure default workspace exists
+            default_ws = db.query(Workspace).filter(Workspace.id == 1).first()
+            if not default_ws:
+                default_ws = Workspace(
+                    id=1,
+                    name="Default Workspace",
+                    slug="default-workspace",
+                    description="Primary operational workspace"
+                )
+                db.add(default_ws)
+                db.flush()
+
+            # Ensure admin is assigned to default workspace with ADMIN role
+            mem = db.query(WorkspaceMember).filter(
+                WorkspaceMember.workspace_id == default_ws.id,
+                WorkspaceMember.user_id == admin_user.id
+            ).first()
+            if not mem:
+                db.add(WorkspaceMember(
+                    workspace_id=default_ws.id,
+                    user_id=admin_user.id,
                     role="ADMIN",
-                    is_active=True
-                ),
-                User(
-                    username="operator",
-                    email="operator@devforge.internal",
-                    hashed_password=hash_password("OperatorPassword123!"),
-                    role="OPERATOR",
-                    is_active=True
-                ),
-                User(
-                    username="developer",
-                    email="developer@devforge.internal",
-                    hashed_password=hash_password("DeveloperPassword123!"),
-                    role="DEVELOPER",
-                    is_active=True
-                ),
-                User(
-                    username="viewer",
-                    email="viewer@devforge.internal",
-                    hashed_password=hash_password("ViewerPassword123!"),
-                    role="VIEWER",
-                    is_active=True
-                ),
-            ]
-            db.add_all(users_data)
+                    status="active"
+                ))
             db.commit()
     except Exception as e:
         db.rollback()

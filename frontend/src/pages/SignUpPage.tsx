@@ -172,7 +172,7 @@ export const SignUpPage: React.FC<SignUpPageProps> = ({ onSuccess, onNavigateToS
               </div>
               <div className="flex items-center gap-1.5 text-zinc-400 pt-1 border-t border-zinc-800/60 text-[10px]">
                 <Shield className="w-3 h-3 text-cyan-400 shrink-0" />
-                <span>Default role: <strong className="text-zinc-200">DEVELOPER</strong> (governed by workspace policy)</span>
+                <span>Default role: <strong className="text-zinc-200">VIEWER</strong> (governed by workspace policy)</span>
               </div>
             </div>
 

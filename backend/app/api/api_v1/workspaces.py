@@ -193,35 +193,56 @@ def add_workspace_member(
             detail=f"Invalid role '{payload.role}'. Must be one of: {ALL_ROLES}"
         )
 
+    clean_email = payload.email.strip().lower()
+    if not clean_email or "@" not in clean_email or "." not in clean_email.split("@")[-1]:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="A valid email address is required."
+        )
+
+    # Password validation if provided
+    initial_password = payload.password
+    if initial_password:
+        if payload.confirm_password and initial_password != payload.confirm_password:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Passwords do not match."
+            )
+        if len(initial_password) < 8:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Password must be at least 8 characters long."
+            )
+    else:
+        initial_password = "DevForgeUser2026!"
+
     # Resolve target user
-    target_user = None
-    if payload.username:
-        target_user = db.query(User).filter(User.username == payload.username.strip()).first()
-    elif payload.email:
-        target_user = db.query(User).filter(User.email == payload.email.strip()).first()
+    target_user = db.query(User).filter(User.email.ilike(clean_email)).first()
+    if not target_user and payload.username:
+        target_user = db.query(User).filter(User.username.ilike(payload.username.strip())).first()
 
     if not target_user:
-        # Create user if email or username provided
-        username = (payload.username or payload.email.split("@")[0]).strip()
-        email = (payload.email or f"{username}@devforge.internal").strip()
-        
-        # Check if already exists
-        existing = db.query(User).filter((User.username == username) | (User.email == email)).first()
-        if existing:
-            target_user = existing
-        else:
-            target_user = User(
-                username=username,
-                email=email,
-                display_name=username.capitalize(),
-                hashed_password=hash_password("DevForgeUser2026!"),
-                role=target_role,
-                is_active=True,
-                status="active"
-            )
-            db.add(target_user)
-            db.commit()
-            db.refresh(target_user)
+        username = (payload.username or clean_email.split("@")[0]).strip()
+        username = "".join(c for c in username if c.isalnum() or c in ("-", "_"))[:40] or "user"
+        counter = 1
+        base_u = username
+        while db.query(User).filter(User.username == username).first():
+            username = f"{base_u[:35]}_{counter}"
+            counter += 1
+
+        display_name = (payload.name or username).strip()
+        target_user = User(
+            username=username,
+            email=clean_email,
+            display_name=display_name,
+            hashed_password=hash_password(initial_password),
+            role=target_role,
+            is_active=True,
+            status="active"
+        )
+        db.add(target_user)
+        db.commit()
+        db.refresh(target_user)
 
     # Check if membership already exists
     existing_member = db.query(WorkspaceMember).filter(
@@ -345,12 +366,35 @@ def update_workspace_member(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=f"Invalid role '{payload.role}'. Must be one of: {ALL_ROLES}"
             )
+        # Protect against demoting the final remaining ADMIN
+        if target_member.role == ROLE_ADMIN and new_role != ROLE_ADMIN:
+            active_admins = db.query(WorkspaceMember).filter(
+                WorkspaceMember.workspace_id == workspace_id,
+                WorkspaceMember.role == ROLE_ADMIN,
+                WorkspaceMember.status == "active"
+            ).count()
+            if active_admins <= 1:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Cannot demote the final remaining workspace administrator."
+                )
         target_member.role = new_role
 
     if payload.status:
         st = payload.status.strip().lower()
         if st not in ("active", "disabled"):
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Status must be 'active' or 'disabled'")
+        if target_member.role == ROLE_ADMIN and st == "disabled":
+            active_admins = db.query(WorkspaceMember).filter(
+                WorkspaceMember.workspace_id == workspace_id,
+                WorkspaceMember.role == ROLE_ADMIN,
+                WorkspaceMember.status == "active"
+            ).count()
+            if active_admins <= 1:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Cannot disable the final remaining workspace administrator."
+                )
         target_member.status = st
 
     db.commit()
@@ -391,11 +435,13 @@ def update_workspace_member(
 def remove_or_disable_workspace_member(
     workspace_id: int,
     member_id: int,
+    permanent: bool = False,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
     """
     Disable or remove a member from the workspace. Requires workspace ADMIN.
+    Protects against deleting or disabling the final remaining administrator.
     """
     caller_member = db.query(WorkspaceMember).filter(
         WorkspaceMember.workspace_id == workspace_id,
@@ -417,7 +463,23 @@ def remove_or_disable_workspace_member(
     if not target_member:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Member not found.")
 
-    target_member.status = "disabled"
+    # Protect against removing/disabling the final remaining ADMIN
+    if target_member.role == ROLE_ADMIN and target_member.status == "active":
+        active_admins = db.query(WorkspaceMember).filter(
+            WorkspaceMember.workspace_id == workspace_id,
+            WorkspaceMember.role == ROLE_ADMIN,
+            WorkspaceMember.status == "active"
+        ).count()
+        if active_admins <= 1:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Cannot delete or disable the final remaining workspace administrator."
+            )
+
+    if permanent:
+        db.delete(target_member)
+    else:
+        target_member.status = "disabled"
     db.commit()
 
     # Audit member disabled

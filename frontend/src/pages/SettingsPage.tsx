@@ -41,9 +41,12 @@ export const SettingsPage: React.FC = () => {
 
   // Add Member Modal State
   const [showAddModal, setShowAddModal] = useState(false);
+  const [newName, setNewName] = useState('');
   const [newEmail, setNewEmail] = useState('');
   const [newUsername, setNewUsername] = useState('');
   const [newDisplayName, setNewDisplayName] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [newConfirmPassword, setNewConfirmPassword] = useState('');
   const [newRole, setNewRole] = useState<'ADMIN' | 'OPERATOR' | 'DEVELOPER' | 'VIEWER'>('DEVELOPER');
   const [submittingMember, setSubmittingMember] = useState(false);
 
@@ -93,21 +96,36 @@ export const SettingsPage: React.FC = () => {
       setActionError('Email address is required.');
       return;
     }
+    if (newPassword && newPassword.length < 8) {
+      setActionError('Password must be at least 8 characters long.');
+      return;
+    }
+    if (newPassword && newPassword !== newConfirmPassword) {
+      setActionError('Passwords do not match.');
+      return;
+    }
+
     setSubmittingMember(true);
     setActionError(null);
     setActionSuccess(null);
     try {
       await api.addWorkspaceMember(activeWsId, {
         email: newEmail.trim(),
+        name: newName.trim() || undefined,
         username: newUsername.trim() || undefined,
-        display_name: newDisplayName.trim() || undefined,
+        display_name: newDisplayName.trim() || newName.trim() || undefined,
+        password: newPassword || undefined,
+        confirm_password: newConfirmPassword || undefined,
         role: newRole
       });
-      setActionSuccess(`Successfully added ${newEmail.trim()} as ${newRole}.`);
+      setActionSuccess(`Successfully created user ${newEmail.trim()} with role ${newRole}.`);
       setShowAddModal(false);
+      setNewName('');
       setNewEmail('');
       setNewUsername('');
       setNewDisplayName('');
+      setNewPassword('');
+      setNewConfirmPassword('');
       setNewRole('DEVELOPER');
       await loadMembers();
       await loadWorkspaceData();
@@ -142,6 +160,22 @@ export const SettingsPage: React.FC = () => {
       await loadMembers();
     } catch (err: any) {
       setActionError(err.message || 'Failed to disable member.');
+    }
+  };
+
+  const handleDeleteMember = async (memberId: number, memberName: string) => {
+    if (!window.confirm(`Are you sure you want to permanently delete user ${memberName}? This action cannot be undone.`)) {
+      return;
+    }
+    setActionError(null);
+    setActionSuccess(null);
+    try {
+      await api.deleteWorkspaceMember(activeWsId, memberId, true);
+      setActionSuccess(`Member ${memberName} deleted.`);
+      await loadMembers();
+      await loadWorkspaceData();
+    } catch (err: any) {
+      setActionError(err.message || 'Failed to delete member.');
     }
   };
 
@@ -379,19 +413,31 @@ export const SettingsPage: React.FC = () => {
                         </td>
 
                         <td className="py-3 px-4 text-right">
-                          {isAdmin && !isSelf && m.status === 'active' && (
-                            <button
-                              id={`disable-member-btn-${m.id}`}
-                              data-testid={`disable-member-btn-${m.id}`}
-                              onClick={() => handleDisableMember(m.id, m.display_name || m.username || 'member')}
-                              className="text-rose-400 hover:text-rose-300 text-xs font-mono hover:underline cursor-pointer"
-                            >
-                              Disable
-                            </button>
-                          )}
-                          {m.status === 'disabled' && (
-                            <span className="text-zinc-500 font-mono text-[11px]">Disabled</span>
-                          )}
+                          <div className="flex items-center justify-end gap-2.5">
+                            {isAdmin && !isSelf && m.status === 'active' && (
+                              <button
+                                id={`disable-member-btn-${m.id}`}
+                                data-testid={`disable-member-btn-${m.id}`}
+                                onClick={() => handleDisableMember(m.id, m.display_name || m.username || 'member')}
+                                className="text-amber-400 hover:text-amber-300 text-xs font-mono hover:underline cursor-pointer"
+                              >
+                                Disable
+                              </button>
+                            )}
+                            {m.status === 'disabled' && (
+                              <span className="text-zinc-500 font-mono text-[11px]">Disabled</span>
+                            )}
+                            {isAdmin && !isSelf && (
+                              <button
+                                id={`delete-member-btn-${m.id}`}
+                                data-testid={`delete-member-btn-${m.id}`}
+                                onClick={() => handleDeleteMember(m.id, m.display_name || m.username || 'member')}
+                                className="text-rose-400 hover:text-rose-300 text-xs font-mono hover:underline cursor-pointer"
+                              >
+                                Delete
+                              </button>
+                            )}
+                          </div>
                         </td>
                       </tr>
                     );
@@ -415,7 +461,7 @@ export const SettingsPage: React.FC = () => {
                 <div className="flex items-center justify-between pb-3 border-b border-zinc-800">
                   <h3 className="text-sm font-semibold text-white flex items-center gap-2">
                     <UserPlus className="w-4 h-4 text-emerald-400" />
-                    Add Workspace Member
+                    Create User / Add Member
                   </h3>
                   <button
                     onClick={() => setShowAddModal(false)}
@@ -425,7 +471,23 @@ export const SettingsPage: React.FC = () => {
                   </button>
                 </div>
 
-                <form onSubmit={handleAddMember} className="space-y-3.5 text-xs">
+                <form onSubmit={handleAddMember} className="space-y-3 text-xs">
+                  <div>
+                    <label className="block text-zinc-300 font-medium mb-1 font-mono">
+                      Full Name <span className="text-rose-400">*</span>
+                    </label>
+                    <input
+                      id="add-member-name-input"
+                      data-testid="add-member-name-input"
+                      type="text"
+                      required
+                      placeholder="Jane Doe"
+                      value={newName}
+                      onChange={(e) => setNewName(e.target.value)}
+                      className="w-full px-3 py-2 bg-zinc-950 border border-zinc-800 rounded text-zinc-200 font-mono focus:outline-none focus:border-zinc-600"
+                    />
+                  </div>
+
                   <div>
                     <label className="block text-zinc-300 font-medium mb-1 font-mono">
                       Email Address <span className="text-rose-400">*</span>
@@ -435,7 +497,7 @@ export const SettingsPage: React.FC = () => {
                       data-testid="add-member-email-input"
                       type="email"
                       required
-                      placeholder="engineer@devforge.internal"
+                      placeholder="jane@devforge.com"
                       value={newEmail}
                       onChange={(e) => setNewEmail(e.target.value)}
                       className="w-full px-3 py-2 bg-zinc-950 border border-zinc-800 rounded text-zinc-200 font-mono focus:outline-none focus:border-zinc-600"
@@ -445,29 +507,31 @@ export const SettingsPage: React.FC = () => {
                   <div className="grid grid-cols-2 gap-3">
                     <div>
                       <label className="block text-zinc-300 font-medium mb-1 font-mono">
-                        Username
+                        Password <span className="text-rose-400">*</span>
                       </label>
                       <input
-                        id="add-member-username-input"
-                        data-testid="add-member-username-input"
-                        type="text"
-                        placeholder="jsmith"
-                        value={newUsername}
-                        onChange={(e) => setNewUsername(e.target.value)}
+                        id="add-member-password-input"
+                        data-testid="add-member-password-input"
+                        type="password"
+                        required
+                        placeholder="••••••••"
+                        value={newPassword}
+                        onChange={(e) => setNewPassword(e.target.value)}
                         className="w-full px-3 py-2 bg-zinc-950 border border-zinc-800 rounded text-zinc-200 font-mono focus:outline-none focus:border-zinc-600"
                       />
                     </div>
                     <div>
                       <label className="block text-zinc-300 font-medium mb-1 font-mono">
-                        Display Name
+                        Confirm Password <span className="text-rose-400">*</span>
                       </label>
                       <input
-                        id="add-member-displayname-input"
-                        data-testid="add-member-displayname-input"
-                        type="text"
-                        placeholder="John Smith"
-                        value={newDisplayName}
-                        onChange={(e) => setNewDisplayName(e.target.value)}
+                        id="add-member-confirmpassword-input"
+                        data-testid="add-member-confirmpassword-input"
+                        type="password"
+                        required
+                        placeholder="••••••••"
+                        value={newConfirmPassword}
+                        onChange={(e) => setNewConfirmPassword(e.target.value)}
                         className="w-full px-3 py-2 bg-zinc-950 border border-zinc-800 rounded text-zinc-200 font-mono focus:outline-none focus:border-zinc-600"
                       />
                     </div>
@@ -508,7 +572,7 @@ export const SettingsPage: React.FC = () => {
                       className="px-3 py-1.5 rounded bg-emerald-600 hover:bg-emerald-500 text-white font-medium transition flex items-center gap-1.5 font-mono cursor-pointer disabled:opacity-50"
                     >
                       {submittingMember ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
-                      <span>Add Member</span>
+                      <span>Create User</span>
                     </button>
                   </div>
                 </form>

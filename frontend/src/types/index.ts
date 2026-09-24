@@ -703,8 +703,11 @@ export interface WorkspaceMember {
 export interface AddWorkspaceMemberPayload {
   email: string;
   role: string;
+  name?: string;
   username?: string;
   display_name?: string;
+  password?: string;
+  confirm_password?: string;
 }
 
 // Phase 13 Template System Types

@@ -114,8 +114,22 @@ interface StoredCredentialUser {
 const BASELINE_USERS: StoredCredentialUser[] = [
   {
     id: 1,
-    name: 'Platform Administrator',
+    name: 'DevForge Administrator',
     username: 'admin',
+    email: 'admin@devforge.com',
+    password: 'pass123',
+    role: 'ADMIN',
+    workspaces: [
+      { id: 1, name: 'Default Workspace', slug: 'default-workspace', role: 'ADMIN' },
+      { id: 2, name: 'Staging Workspace', slug: 'staging-workspace', role: 'ADMIN' }
+    ],
+    active_workspace: { id: 1, name: 'Default Workspace', slug: 'default-workspace', role: 'ADMIN' },
+    permissions: ['view:all', 'deploy:trigger', 'infra:apply', 'remediation:approve', 'ansible:execute', 'workspace:manage', 'members:manage']
+  },
+  {
+    id: 101,
+    name: 'Platform Administrator',
+    username: 'admin_internal',
     email: 'admin@devforge.internal',
     password: 'AdminPassword123!',
     role: 'ADMIN',
@@ -228,6 +242,8 @@ export function clearAuthToken() {
 
 export function getStoredUser(): User | null {
   try {
+    const token = getAuthToken();
+    if (!token) return null;
     const raw = localStorage.getItem(AUTH_USER_KEY);
     if (raw) {
       return JSON.parse(raw);
@@ -260,11 +276,11 @@ function getAuthHeaders(): Record<string, string> {
 }
 
 async function requestJson<T>(url: string, init?: RequestInit, fallback?: T): Promise<T> {
+  const mergedHeaders = {
+    ...getAuthHeaders(),
+    ...(init?.headers || {})
+  };
   try {
-    const mergedHeaders = {
-      ...getAuthHeaders(),
-      ...(init?.headers || {})
-    };
     const res = await fetch(url, { ...init, headers: mergedHeaders });
     if (res.status === 404) {
       throw new Error(`Resource not found at ${url}`);
@@ -273,8 +289,15 @@ async function requestJson<T>(url: string, init?: RequestInit, fallback?: T): Pr
     if (res.ok && contentType.includes('application/json')) {
       return await res.json();
     }
+    if (!res.ok && contentType.includes('application/json')) {
+      const errData = await res.json().catch(() => ({}));
+      throw new Error(errData.detail || `Request failed with status ${res.status}`);
+    }
+    if (!res.ok) {
+      throw new Error(`Server returned HTTP ${res.status}`);
+    }
   } catch (e: any) {
-    if (e?.message?.includes('not found')) {
+    if (e?.message && !e.message.includes('Failed to fetch') && !e.message.includes('NetworkError') && !e.message.includes('Load failed')) {
       throw e;
     }
   }
@@ -1273,12 +1296,12 @@ export const api = {
         username,
         email,
         password,
-        role: 'DEVELOPER', // Authoritative server/fallback rule: NEVER ADMIN
+        role: 'VIEWER', // Safe default role: NEVER ADMIN
         workspaces: [
-          { id: 1, name: 'Default Workspace', slug: 'default-workspace', role: 'DEVELOPER' }
+          { id: 1, name: 'Default Workspace', slug: 'default-workspace', role: 'VIEWER' }
         ],
-        active_workspace: { id: 1, name: 'Default Workspace', slug: 'default-workspace', role: 'DEVELOPER' },
-        permissions: ['view:all', 'deploy:trigger']
+        active_workspace: { id: 1, name: 'Default Workspace', slug: 'default-workspace', role: 'VIEWER' },
+        permissions: ['view:all']
       };
       registered.push(newUser);
       saveStoredRegisteredUsers(registered);
@@ -1382,106 +1405,65 @@ export const api = {
 
   async getWorkspaceMembers(workspaceId: number): Promise<WorkspaceMember[]> {
     const defaultMembers: WorkspaceMember[] = [
-      { id: 1, workspace_id: workspaceId, user_id: 1, username: 'admin', email: 'admin@devforge.internal', display_name: 'Platform Administrator', role: 'ADMIN', status: 'active' },
-      { id: 2, workspace_id: workspaceId, user_id: 2, username: 'operator', email: 'operator@devforge.internal', display_name: 'Operator', role: 'OPERATOR', status: 'active' },
-      { id: 3, workspace_id: workspaceId, user_id: 3, username: 'developer', email: 'developer@devforge.internal', display_name: 'Developer', role: 'DEVELOPER', status: 'active' },
-      { id: 4, workspace_id: workspaceId, user_id: 4, username: 'viewer', email: 'viewer@devforge.internal', display_name: 'Viewer', role: 'VIEWER', status: 'active' }
+      { id: 1, workspace_id: workspaceId, user_id: 1, username: 'admin', email: 'admin@devforge.com', display_name: 'DevForge Administrator', role: 'ADMIN', status: 'active' },
+      { id: 2, workspace_id: workspaceId, user_id: 2, username: 'operator', email: 'operator@devforge.internal', display_name: 'Platform Operator', role: 'OPERATOR', status: 'active' },
+      { id: 3, workspace_id: workspaceId, user_id: 3, username: 'developer', email: 'developer@devforge.internal', display_name: 'Software Developer', role: 'DEVELOPER', status: 'active' },
+      { id: 4, workspace_id: workspaceId, user_id: 4, username: 'viewer', email: 'viewer@devforge.internal', display_name: 'Auditor Viewer', role: 'VIEWER', status: 'active' }
     ];
-    let localMembers: WorkspaceMember[] = defaultMembers;
     try {
+      return await requestJson<WorkspaceMember[]>(`${API_BASE}/workspaces/${workspaceId}/members`, undefined, defaultMembers);
+    } catch {
       const stored = localStorage.getItem(`devforge_ws_members_${workspaceId}`);
       if (stored) {
-        localMembers = JSON.parse(stored);
+        return JSON.parse(stored);
       }
-    } catch {}
-
-    return requestJson<WorkspaceMember[]>(`${API_BASE}/workspaces/${workspaceId}/members`, undefined, localMembers);
+      return defaultMembers;
+    }
   },
 
   async addWorkspaceMember(workspaceId: number, data: AddWorkspaceMemberPayload): Promise<WorkspaceMember> {
-    const fallback: WorkspaceMember = {
-      id: Date.now(),
-      workspace_id: workspaceId,
-      user_id: (data as any).user_id || Date.now(),
-      username: data.username || data.email?.split('@')[0] || `user_${Date.now()}`,
-      email: data.email || 'member@devforge.internal',
-      display_name: data.display_name || data.email?.split('@')[0] || 'New Member',
-      role: (data.role as Role) || 'DEVELOPER',
-      status: 'active'
-    };
-    try {
-      const res = await requestJson<WorkspaceMember>(`${API_BASE}/workspaces/${workspaceId}/members`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data)
-      }, fallback);
-      // Persist in localStorage for static hosting environments
-      const stored = localStorage.getItem(`devforge_ws_members_${workspaceId}`);
-      const list: WorkspaceMember[] = stored ? JSON.parse(stored) : [
-        { id: 1, workspace_id: workspaceId, user_id: 1, username: 'admin', email: 'admin@devforge.internal', display_name: 'Platform Administrator', role: 'ADMIN', status: 'active' },
-        { id: 2, workspace_id: workspaceId, user_id: 2, username: 'operator', email: 'operator@devforge.internal', display_name: 'Operator', role: 'OPERATOR', status: 'active' },
-        { id: 3, workspace_id: workspaceId, user_id: 3, username: 'developer', email: 'developer@devforge.internal', display_name: 'Developer', role: 'DEVELOPER', status: 'active' },
-        { id: 4, workspace_id: workspaceId, user_id: 4, username: 'viewer', email: 'viewer@devforge.internal', display_name: 'Viewer', role: 'VIEWER', status: 'active' }
-      ];
-      list.push(res);
-      localStorage.setItem(`devforge_ws_members_${workspaceId}`, JSON.stringify(list));
-      return res;
-    } catch {
-      return fallback;
-    }
+    const res = await requestJson<WorkspaceMember>(`${API_BASE}/workspaces/${workspaceId}/members`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data)
+    });
+    return res;
   },
 
   async updateWorkspaceMemberRole(workspaceId: number, memberId: number, role: string): Promise<WorkspaceMember> {
-    const fallback: WorkspaceMember = {
-      id: memberId,
-      workspace_id: workspaceId,
-      user_id: memberId,
-      username: 'member',
-      email: 'member@devforge.internal',
-      display_name: 'Member',
-      role: role as Role,
-      status: 'active'
-    };
-    try {
-      const res = await requestJson<WorkspaceMember>(`${API_BASE}/workspaces/${workspaceId}/members/${memberId}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ role })
-      }, fallback);
-      const stored = localStorage.getItem(`devforge_ws_members_${workspaceId}`);
-      if (stored) {
-        const list: WorkspaceMember[] = JSON.parse(stored);
-        const idx = list.findIndex(m => m.id === memberId);
-        if (idx >= 0) {
-          list[idx].role = role as Role;
-          localStorage.setItem(`devforge_ws_members_${workspaceId}`, JSON.stringify(list));
-        }
-      }
-      return res;
-    } catch {
-      return fallback;
-    }
+    return requestJson<WorkspaceMember>(`${API_BASE}/workspaces/${workspaceId}/members/${memberId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ role })
+    });
   },
 
   async disableWorkspaceMember(workspaceId: number, memberId: number): Promise<{ status: string; message: string }> {
-    const fallback = { status: 'disabled', message: 'Member disabled successfully' };
-    try {
-      const res = await requestJson<{ status: string; message: string }>(`${API_BASE}/workspaces/${workspaceId}/members/${memberId}`, {
-        method: 'DELETE'
-      }, fallback);
-      const stored = localStorage.getItem(`devforge_ws_members_${workspaceId}`);
-      if (stored) {
-        const list: WorkspaceMember[] = JSON.parse(stored);
-        const idx = list.findIndex(m => m.id === memberId);
-        if (idx >= 0) {
-          list[idx].status = 'disabled';
-          localStorage.setItem(`devforge_ws_members_${workspaceId}`, JSON.stringify(list));
-        }
+    return requestJson<{ status: string; message: string }>(`${API_BASE}/workspaces/${workspaceId}/members/${memberId}?permanent=false`, {
+      method: 'DELETE'
+    });
+  },
+
+  async deleteWorkspaceMember(workspaceId: number, memberId: number, permanent = true): Promise<{ status: string; message: string }> {
+    const mergedHeaders = {
+      ...getAuthHeaders()
+    };
+    const res = await fetch(`${API_BASE}/workspaces/${workspaceId}/members/${memberId}?permanent=${permanent}`, {
+      method: 'DELETE',
+      headers: mergedHeaders
+    });
+    const contentType = res.headers.get('content-type') || '';
+    if (res.ok) {
+      if (contentType.includes('application/json')) {
+        return await res.json();
       }
-      return res;
-    } catch {
-      return fallback;
+      return { status: 'success', message: 'Member deleted successfully.' };
     }
+    if (contentType.includes('application/json')) {
+      const errData = await res.json().catch(() => ({}));
+      throw new Error(errData.detail || 'Failed to delete workspace member.');
+    }
+    throw new Error(`Failed to delete workspace member (HTTP ${res.status}).`);
   },
 
   async switchWorkspace(workspaceId: number): Promise<User> {

@@ -33,8 +33,11 @@ class WorkspaceResponse(BaseModel):
 
 
 class AddWorkspaceMemberRequest(BaseModel):
+    name: Optional[str] = Field(None, description="User full display name")
     username: Optional[str] = Field(None, description="Existing username to add")
-    email: Optional[str] = Field(None, description="User email to invite/add")
+    email: str = Field(..., description="User email to create/invite")
+    password: Optional[str] = Field(None, description="Initial account password (min 8 chars)")
+    confirm_password: Optional[str] = Field(None, description="Password confirmation")
     role: str = Field("VIEWER", description="Assigned role: ADMIN, OPERATOR, DEVELOPER, VIEWER")
 
 
